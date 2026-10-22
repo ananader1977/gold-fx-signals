@@ -9,6 +9,10 @@ on:
         description: "Connection check only (no trades)"
         type: boolean
         default: true
+      telegram_test:
+        description: "Send a Telegram test message"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -33,6 +37,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Telegram test
+        if: github.event_name == 'workflow_dispatch' && inputs.telegram_test
+        run: python -c "import alert; alert.telegram('Test message from your gold-fx-signals bot. Telegram alerts are working.')"
       - name: Connection check
         if: github.event_name == 'workflow_dispatch' && inputs.check_only
         run: python trade.py --check
