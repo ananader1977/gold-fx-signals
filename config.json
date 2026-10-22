@@ -1,0 +1,23 @@
+{
+  "signal_alerts": true,
+  "symbols": {
+    "XAU/USD": { "above": [], "below": [] },
+    "EUR/USD": { "above": [], "below": [] }
+  },
+  "trading": {
+    "enabled": false,
+    "mode": "demo",
+    "risk_pct": 1.0,
+    "max_size": { "XAU/USD": 1, "EUR/USD": 10000 },
+    "epics": { "XAU/USD": "GOLD", "EUR/USD": "EURUSD" },
+    "stop_atr": 1.5,
+    "target_atr": 3.0,
+    "max_open_positions": 2,
+    "max_trades_per_day": 4,
+    "max_daily_loss_pct": 3.0,
+    "max_spread_atr": 0.3,
+    "close_on_opposite_signal": true,
+    "no_trade_hours_utc": [[12, 15]],
+    "no_trade_friday_after_utc": 18
+  }
+}

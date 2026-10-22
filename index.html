@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold & EUR/USD Signals</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#2a2f3a;--txt:#e7e9ee;--mut:#8b93a5;--buy:#1fbf75;--sell:#ef4b5b;--wait:#e0b341;--acc:#4c8dff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:17px;margin:0}small,.mut{color:var(--mut)}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.price{font-size:26px;font-weight:700}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-weight:700;font-size:13px}
+.BUY{background:color-mix(in srgb,var(--buy) 20%,transparent);color:var(--buy)}
+.SELL{background:color-mix(in srgb,var(--sell) 20%,transparent);color:var(--sell)}
+.WAIT{background:color-mix(in srgb,var(--wait) 20%,transparent);color:var(--wait)}
+table{width:100%;border-collapse:collapse;margin-top:8px}td{padding:4px 0;border-bottom:1px solid var(--line)}td:last-child{text-align:right}
+input,select,button{background:#0c0e12;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:inherit}
+input{width:120px}button{cursor:pointer;background:var(--acc);border-color:var(--acc);font-weight:600}
+button.ghost{background:transparent;color:var(--txt);border-color:var(--line)}
+.chart{height:260px;margin-top:10px}
+.alerts li{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+ul{list-style:none;padding:0;margin:8px 0 0}
+#log{max-height:160px;overflow:auto;font-size:12px}
+.warn{border-color:var(--wait)}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Gold & EUR/USD Signals</h1><small id="status">Not started</small></div>
+  <div class="row"><button class="ghost" id="notifyBtn">Enable notifications</button><button id="refreshBtn">Refresh now</button></div>
+</header>
+<main>
+  <div class="card warn" id="setup">
+    <b>Setup</b> <span class="mut">— stored only in this browser</span>
+    <div class="row" style="margin-top:8px">
+      <label>Twelve Data API key <input id="apiKey" type="password" style="width:220px" placeholder="free key"></label>
+      <label>Poll every (sec) <input id="poll" type="number" min="30" value="60"></label>
+      <label>Account balance ($) <input id="balance" type="number" value="500"></label>
+      <label>Risk per trade (%) <input id="riskPct" type="number" step="0.1" value="1"></label>
+      <button id="saveBtn">Save & start</button>
+    </div>
+    <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses 2 calls. Polling slows to 1/3 speed when the tab is in the background and pauses on weekends.</p>
+  </div>
+
+  <div class="grid" id="cards"></div>
+
+  <div class="card">
+    <b>Price-target alerts</b>
+    <div class="row" style="margin-top:8px">
+      <select id="aSym"><option>XAU/USD</option><option>EUR/USD</option></select>
+      <select id="aDir"><option value="above">rises to / above</option><option value="below">falls to / below</option></select>
+      <input id="aPrice" type="number" step="any" placeholder="price">
+      <button id="addAlert">Add alert</button>
+    </div>
+    <ul class="alerts" id="alertList"></ul>
+    <p class="mut" style="margin:8px 0 0">These fire while this page is open. For alerts on your phone when the page is closed, use the GitHub Actions + Telegram setup in the README (and Capital.com's own price alerts for truly instant ones).</p>
+  </div>
+
+  <div class="card"><b>Log</b><div id="log" class="mut"></div></div>
+  <p class="mut">Signals are mechanical readings of technical indicators on 1-hour candles. They are not financial advice and are often wrong. Always use a stop loss and confirm prices on Capital.com — broker prices and spreads differ from this data feed.</p>
+</main>
+
+<script>
+const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5}};
+const S = { key:"", poll:60, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
+const $ = id => document.getElementById(id);
+const store = { get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
+
+function log(msg){const t=new Date().toLocaleTimeString();$("log").insertAdjacentHTML("afterbegin",`<div>${t} — ${msg}</div>`)}
+
+// ---------- indicators ----------
+function ema(a,n){const k=2/(n+1),o=new Array(a.length).fill(null);if(a.length<n)return o;let s=0;for(let i=0;i<n;i++)s+=a[i];o[n-1]=s/n;for(let i=n;i<a.length;i++)o[i]=a[i]*k+o[i-1]*(1-k);return o}
+function rsi(a,n=14){const o=new Array(a.length).fill(null);if(a.length<=n)return o;let g=0,l=0;for(let i=1;i<=n;i++){const d=a[i]-a[i-1];d>0?g+=d:l-=d}g/=n;l/=n;o[n]=l===0?100:100-100/(1+g/l);for(let i=n+1;i<a.length;i++){const d=a[i]-a[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;o[i]=l===0?100:100-100/(1+g/l)}return o}
+function macd(a){const e12=ema(a,12),e26=ema(a,26);const m=a.map((_,i)=>e12[i]!=null&&e26[i]!=null?e12[i]-e26[i]:null);const st=m.findIndex(v=>v!=null);const sig=new Array(a.length).fill(null);if(st>=0){const s=ema(m.slice(st),9);s.forEach((v,i)=>sig[st+i]=v)}return {m,sig,h:m.map((v,i)=>v!=null&&sig[i]!=null?v-sig[i]:null)}}
+function boll(a,n=20,k=2){const i=a.length-1;if(a.length<n)return null;const w=a.slice(i-n+1);const mean=w.reduce((x,y)=>x+y,0)/n;const sd=Math.sqrt(w.reduce((x,y)=>x+(y-mean)**2,0)/n);return {mid:mean,up:mean+k*sd,lo:mean-k*sd}}
+function atr(c,n=14){if(c.length<=n)return null;const tr=c.map((x,i)=>i===0?x.high-x.low:Math.max(x.high-x.low,Math.abs(x.high-c[i-1].close),Math.abs(x.low-c[i-1].close)));let a=tr.slice(1,n+1).reduce((x,y)=>x+y,0)/n;for(let i=n+1;i<tr.length;i++)a=(a*(n-1)+tr[i])/n;return a}
+
+function analyse(candles){
+  const cl=candles.map(c=>c.close),i=cl.length-1,p=cl[i];
+  const e20=ema(cl,20)[i],e50=ema(cl,50)[i],r=rsi(cl)[i],M=macd(cl),b=boll(cl),A=atr(candles);
+  const h=M.h[i],hp=M.h[i-1];let score=0;const why=[];
+  if(e20>e50){score++;why.push("EMA20 above EMA50 (uptrend)")}else{score--;why.push("EMA20 below EMA50 (downtrend)")}
+  if(p>e50){score++;why.push("Price above EMA50")}else{score--;why.push("Price below EMA50")}
+  if(h>0){score++;why.push("MACD momentum positive")}else{score--;why.push("MACD momentum negative")}
+  if(hp!=null&&h>0&&hp<=0){score++;why.push("Fresh MACD bullish cross")}
+  if(hp!=null&&h<0&&hp>=0){score--;why.push("Fresh MACD bearish cross")}
+  if(r<30){score++;why.push("RSI oversold (<30)")} else if(r>70){score--;why.push("RSI overbought (>70)")}
+  if(b&&p<b.lo){score++;why.push("Below lower Bollinger band")} else if(b&&p>b.up){score--;why.push("Above upper Bollinger band")}
+  const signal=score>=3?"BUY":score<=-3?"SELL":"WAIT";
+  let plan=null;
+  if(A&&signal!=="WAIT"){const d=signal==="BUY"?1:-1;plan={entry:p,stop:p-d*1.5*A,target:p+d*3*A,stopDist:1.5*A}}
+  return {p,e20,e50,r,h,b,A,score,signal,why,plan};
+}
+
+// ---------- data ----------
+async function td(path,params){
+  const u=new URL("https://api.twelvedata.com/"+path);Object.entries({...params,apikey:S.key}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const res=await fetch(u);const j=await res.json();if(j.status==="error")throw new Error(j.message);return j;
+}
+async function fetchCandles(){
+  for(const sym of Object.keys(SYMBOLS)){
+    const j=await td("time_series",{symbol:sym,interval:"1h",outputsize:200,timezone:"UTC"});
+    S.candles[sym]=j.values.map(v=>({time:Math.floor(Date.parse(v.datetime.replace(" ","T")+"Z")/1000),open:+v.open,high:+v.high,low:+v.low,close:+v.close})).reverse();
+  }
+  S.lastCandleFetch=Date.now();log("Candles refreshed");
+}
+async function fetchPrices(){
+  const j=await td("price",{symbol:Object.keys(SYMBOLS).join(",")});
+  for(const sym of Object.keys(SYMBOLS)){const v=j[sym]?.price??j.price;if(v!=null)S.price[sym]=+v}
+  for(const sym of Object.keys(SYMBOLS)){const c=S.candles[sym];const p=S.price[sym];if(c&&c.length&&p){const last=c[c.length-1];last.close=p;last.high=Math.max(last.high,p);last.low=Math.min(last.low,p)}}
+}
+function marketClosed(){const d=new Date(),day=d.getUTCDay(),h=d.getUTCHours();return day===6||(day===0&&h<21)||(day===5&&h>=21)}
+
+// ---------- UI ----------
+function fmt(sym,v){return v==null||isNaN(v)?"—":v.toFixed(SYMBOLS[sym].dp)}
+function buildCards(){
+  $("cards").innerHTML=Object.entries(SYMBOLS).map(([sym,m])=>`<div class="card" id="c-${sym.replace("/","")}">
+   <div class="row" style="justify-content:space-between"><div><b>${sym}</b> <span class="mut">${m.name}</span></div><span class="badge WAIT" data-k="sig">—</span></div>
+   <div class="price" data-k="price">—</div><div class="mut" data-k="score"></div>
+   <div class="chart" data-k="chart"></div>
+   <table data-k="tbl"></table><ul data-k="why" class="mut" style="margin-top:8px"></ul><div data-k="plan" style="margin-top:8px"></div></div>`).join("");
+  for(const sym of Object.keys(SYMBOLS)){
+    const el=document.querySelector(`#c-${sym.replace("/","")} [data-k=chart]`);
+    const ch=LightweightCharts.createChart(el,{layout:{background:{color:"transparent"},textColor:"#8b93a5"},grid:{vertLines:{color:"#20242d"},horzLines:{color:"#20242d"}},timeScale:{timeVisible:true},autoSize:true});
+    S.charts[sym]={ch,s:ch.addCandlestickSeries({upColor:"#1fbf75",downColor:"#ef4b5b",borderVisible:false,wickUpColor:"#1fbf75",wickDownColor:"#ef4b5b"}),e50:ch.addLineSeries({color:"#4c8dff",lineWidth:1})};
+  }
+}
+function render(){
+  for(const sym of Object.keys(SYMBOLS)){
+    const c=S.candles[sym];if(!c)continue;const a=analyse(c);const q=k=>document.querySelector(`#c-${sym.replace("/","")} [data-k=${k}]`);
+    q("price").textContent=fmt(sym,a.p);
+    const sig=q("sig");sig.className="badge "+a.signal;sig.textContent=a.signal==="WAIT"?"WAIT — no clear edge":a.signal+" bias";
+    q("score").textContent=`Score ${a.score>0?"+":""}${a.score} (buy ≥ +3, sell ≤ −3) · 1h candles`;
+    q("tbl").innerHTML=`<tr><td>EMA 20 / 50</td><td>${fmt(sym,a.e20)} / ${fmt(sym,a.e50)}</td></tr><tr><td>RSI 14</td><td>${a.r?.toFixed(1)}</td></tr><tr><td>Bollinger low / high</td><td>${fmt(sym,a.b?.lo)} / ${fmt(sym,a.b?.up)}</td></tr><tr><td>ATR 14 (avg hourly range)</td><td>${fmt(sym,a.A)}</td></tr>`;
+    q("why").innerHTML=a.why.map(w=>`<li>• ${w}</li>`).join("");
+    if(a.plan){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
+      q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="XAU/USD"?2:0)} ${sym==="XAU/USD"?"oz":"EUR"}</td></tr></table><small>Size assumes 1 unit = 1 oz gold / 1 EUR. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
+    else q("plan").innerHTML="";
+    const ch=S.charts[sym];ch.s.setData(c);const e=ema(c.map(x=>x.close),50);ch.e50.setData(c.map((x,i)=>({time:x.time,value:e[i]})).filter(x=>x.value!=null));
+  }
+}
+function renderAlerts(){
+  $("alertList").innerHTML=S.alerts.length?S.alerts.map((a,i)=>`<li><span>${a.sym} ${a.dir==="above"?"≥":"≤"} ${a.price} ${a.fired?"<b style='color:var(--buy)'>✓ hit</b>":""}</span><span><button class="ghost" data-del="${i}">Remove</button></span></li>`).join(""):'<li class="mut">No alerts yet</li>';
+}
+function checkAlerts(){
+  let changed=false;
+  for(const a of S.alerts){const p=S.price[a.sym];if(p==null)continue;const hit=a.dir==="above"?p>=a.price:p<=a.price;
+    if(hit&&!a.fired){a.fired=true;changed=true;notify(`${a.sym} hit ${a.price}`,`Price now ${fmt(a.sym,p)}`)}
+    else if(!hit&&a.fired){a.fired=false;changed=true}}
+  if(changed){store.set("alerts",S.alerts);renderAlerts()}
+}
+let lastSig={};
+function checkSignalChanges(){
+  for(const sym of Object.keys(SYMBOLS)){const c=S.candles[sym];if(!c)continue;const s=analyse(c).signal;
+    if(lastSig[sym]&&lastSig[sym]!==s&&s!=="WAIT")notify(`${sym}: ${s} bias`,"Indicator signal changed — review before trading");lastSig[sym]=s}
+}
+function beep(){try{const x=new AudioContext(),o=x.createOscillator(),g=x.createGain();o.connect(g);g.connect(x.destination);o.frequency.value=880;g.gain.value=.15;o.start();setTimeout(()=>{o.stop();x.close()},400)}catch(e){}}
+function notify(title,body){log(`<b>${title}</b> — ${body}`);beep();if("Notification"in window&&Notification.permission==="granted")new Notification(title,{body})}
+
+// ---------- loop ----------
+async function tick(force){
+  if(!S.key){$("status").textContent="Enter your API key to start";return}
+  if(!force&&document.hidden&&Date.now()-(S.lastTick||0)<S.poll*3000)return; // slower polling in background tabs
+  S.lastTick=Date.now();
+  if(!force&&marketClosed()){$("status").textContent="Market closed (weekend) — paused";return}
+  try{
+    if(force||!S.lastCandleFetch||Date.now()-S.lastCandleFetch>30*60e3)await fetchCandles();
+    await fetchPrices();render();checkAlerts();checkSignalChanges();
+    $("status").textContent="Updated "+new Date().toLocaleTimeString();
+  }catch(e){$("status").textContent="Error: "+e.message;log("Error: "+e.message)}
+}
+function start(){clearInterval(S.timer);S.timer=setInterval(()=>tick(false),Math.max(30,S.poll)*1000);tick(true)}
+
+$("saveBtn").onclick=()=>{S.key=$("apiKey").value.trim();S.poll=+$("poll").value||60;S.balance=+$("balance").value||0;S.riskPct=+$("riskPct").value||1;
+  store.set("cfg",{key:S.key,poll:S.poll,balance:S.balance,riskPct:S.riskPct});start()};
+$("refreshBtn").onclick=()=>tick(true);
+$("notifyBtn").onclick=async()=>{if(!("Notification"in window))return alert("This browser does not support notifications");const r=await Notification.requestPermission();log("Notifications: "+r)};
+$("addAlert").onclick=()=>{const price=parseFloat($("aPrice").value);if(isNaN(price))return;S.alerts.push({sym:$("aSym").value,dir:$("aDir").value,price,fired:false});store.set("alerts",S.alerts);$("aPrice").value="";renderAlerts();checkAlerts()};
+$("alertList").onclick=e=>{const i=e.target.dataset.del;if(i!=null){S.alerts.splice(+i,1);store.set("alerts",S.alerts);renderAlerts()}};
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)tick(false)});
+
+const cfg=store.get("cfg",{});Object.assign(S,cfg);S.alerts=store.get("alerts",[]);
+$("apiKey").value=S.key||"";$("poll").value=S.poll;$("balance").value=S.balance;$("riskPct").value=S.riskPct;
+buildCards();renderAlerts();if(S.key)start();else $("status").textContent="Enter your API key to start";
+</script>
+</body>
+</html>
