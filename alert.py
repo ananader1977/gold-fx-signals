@@ -18,12 +18,20 @@ def get(url, params):
         return json.load(r)
 
 
-def telegram(text):
+def telegram(text, strict=False):
+    """Send a Telegram message. Failures are logged, never fatal, unless strict=True (used by the test)."""
     if not (TG_TOKEN and TG_CHAT):
         print("[telegram not configured]", text)
+        if strict:
+            sys.exit("Telegram secrets missing")
         return
     data = urllib.parse.urlencode({"chat_id": TG_CHAT, "text": text}).encode()
-    urllib.request.urlopen(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", data, timeout=30)
+    try:
+        urllib.request.urlopen(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", data, timeout=30)
+    except Exception as e:
+        print(f"[telegram FAILED: {e}]", text)
+        if strict:
+            raise
 
 
 def ema(a, n):
