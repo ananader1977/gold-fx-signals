@@ -1,8 +1,9 @@
 {
   "day": "2026-10-22",
   "start_balance": 1002.81,
-  "trades_today": 2,
+  "trades_today": 3,
   "entered": {
-    "EUR/USD": "SELL"
+    "EUR/USD": "SELL",
+    "XAU/USD": "SELL"
   }
 }
