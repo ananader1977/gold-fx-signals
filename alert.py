@@ -123,7 +123,7 @@ def main():
             telegram(f"📈 {sym}: indicator signal now {signal} bias (score {score:+d}, RSI {r:.0f})\nPrice {p:.{dp}f}. Review the chart before trading.")
         last_sig[sym] = signal
 
-    json.dump({"fired": sorted(fired), "last_signal": last_sig, "updated": now.isoformat(timespec="minutes")},
+    json.dump({"fired": sorted(fired), "last_signal": last_sig},
               open("state.json", "w"), indent=2)
 
 

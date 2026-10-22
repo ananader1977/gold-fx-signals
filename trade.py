@@ -274,7 +274,6 @@ def main():
                        + ("" if ok else f"\nReason: {conf.get('reason') or conf.get('status')}"))
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
-    state["updated"] = now.isoformat(timespec="minutes")
     json.dump(state, open(STATE_FILE, "w"), indent=2)
 
 
