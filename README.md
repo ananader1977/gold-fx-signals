@@ -1,0 +1,2 @@
+# gold-fx-signals
+Test
