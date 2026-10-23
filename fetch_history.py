@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 import alert
 
-SYMBOLS = ["XAU/USD", "EUR/USD", "GBP/USD"]
+SYMBOLS = [x.strip() for x in os.environ.get("SYMBOLS", "XAU/USD,EUR/USD,GBP/USD").split(",") if x.strip()]
 PAGES = int(os.environ.get("PAGES", "2"))   # 5000 bars per page (~10 months of forex)
 os.makedirs("backtest/data", exist_ok=True)
 
@@ -19,7 +19,7 @@ for sym in SYMBOLS:
         if end:
             params["end_date"] = end
         j = alert.get("https://api.twelvedata.com/time_series", params)
-        time.sleep(10)  # stay well under the free plan's 8 calls/min
+        time.sleep(13)  # stay under the free plan's 8 calls/min (the live bot also uses calls)
         if j.get("status") == "error" or not j.get("values"):
             print(sym, "page", page, "error:", j.get("message"))
             break

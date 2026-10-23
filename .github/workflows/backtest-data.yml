@@ -6,6 +6,9 @@ on:
       pages:
         description: "5000-bar pages per instrument (2 = ~15 months)"
         default: "2"
+      symbols:
+        description: "Comma-separated symbols"
+        default: "XAU/USD,EUR/USD,GBP/USD"
 
 permissions:
   contents: write
@@ -16,6 +19,7 @@ jobs:
     env:
       TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
       PAGES: ${{ inputs.pages }}
+      SYMBOLS: ${{ inputs.symbols }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
