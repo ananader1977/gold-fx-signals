@@ -2,6 +2,10 @@ name: Backtest data (manual, never trades)
 
 on:
   workflow_dispatch:
+    inputs:
+      pages:
+        description: "5000-bar pages per instrument (2 = ~15 months)"
+        default: "2"
 
 permissions:
   contents: write
@@ -11,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      PAGES: ${{ inputs.pages }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
