@@ -48,19 +48,25 @@ def blocked(t):
 
 
 def run(sym, bars, sigs, stop_atr=1.5, target_atr=3.0, close_opp=True, time_filter=True,
-        random_dir=None, spread_mult=1.0, start=None, end=None):
+        random_dir=None, spread_mult=1.0, start=None, end=None, long_only=False):
     """Returns list of trades: dict(entry_t, dir, R, exit_reason, hours)."""
     sp = SPREAD[sym] * spread_mult
     trades, pos, entered = [], None, None
+    prev_real, flip = None, False
     rnd = random.Random(random_dir) if random_dir is not None else None
     for i in range(WINDOW - 1, len(bars) - 1):
         b, nb = bars[i], bars[i + 1]
         if start and b["t"] < start: continue
         if end and b["t"] >= end: break
         sig, a = sigs[i]
-        if rnd is not None and sig != "WAIT":
-            # random-direction benchmark: same timing/count of entries, coin-flip direction
-            sig = rnd.choice(["BUY", "SELL"])
+        if rnd is not None:
+            # random-direction benchmark: each time the real signal changes, flip a coin once
+            # and keep that direction until the real signal changes again (same timing, same exits logic)
+            if sig != prev_real:
+                flip = rnd.random() < 0.5
+                prev_real = sig
+            if sig != "WAIT" and flip:
+                sig = "SELL" if sig == "BUY" else "BUY"
         # 1) manage open position on this bar (stop/target checked intrabar)
         if pos and i > pos["i"]:
             d = pos["d"]
@@ -89,7 +95,7 @@ def run(sym, bars, sigs, stop_atr=1.5, target_atr=3.0, close_opp=True, time_filt
             pnl = (px - pos["entry"]) * pos["d"] - pos["fund"]
             trades.append({**pos["meta"], "R": pnl / pos["risk"], "exit": "flip", "hours": i + 1 - pos["i"]})
             pos = None
-        if sig == "WAIT" or pos or entered == sig:
+        if sig == "WAIT" or pos or entered == sig or (long_only and sig == "SELL"):
             continue
         if time_filter and blocked(nb["t"]):
             continue
