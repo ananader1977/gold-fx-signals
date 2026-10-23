@@ -3,7 +3,8 @@
   "last_signal": {
     "XAU/USD": "WAIT",
     "EUR/USD": "SELL",
-    "GBP/USD": "SELL"
+    "GBP/USD": "SELL",
+    "BTC/USD": "WAIT"
   },
   "errors": {}
 }

@@ -78,16 +78,21 @@
    "2026-10-23T18:00:21Z",
    1047.63,
    1054.23
+  ],
+  [
+   "2026-10-23T18:01:39Z",
+   1047.82,
+   1054.75
   ]
  ],
  "mode": "DEMO",
  "currency": "AED",
- "updated": "2026-10-23T18:00:21Z",
+ "updated": "2026-10-23T18:01:39Z",
  "latest": {
-  "balance": 1047.63,
-  "available": 1040.29,
-  "open_pl": 6.6,
-  "equity": 1054.23,
+  "balance": 1047.82,
+  "available": 1040.48,
+  "open_pl": 6.93,
+  "equity": 1054.75,
   "positions": [
    {
     "epic": "GOLD",
@@ -96,13 +101,13 @@
     "level": 4017.29,
     "stop": 4043.0,
     "profit": 3965.54,
-    "upl": 6.6,
+    "upl": 6.93,
     "created": "2026-10-23T03:27:56.054"
    }
   ]
  },
  "signals": {
-  "updated": "2026-10-23T18:00:19Z",
+  "updated": "2026-10-23T18:01:38Z",
   "items": {
    "XAU/USD": {
     "signal": "SELL",
