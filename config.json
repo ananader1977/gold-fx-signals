@@ -8,6 +8,10 @@
     "EUR/USD": {
       "above": [],
       "below": []
+    },
+    "XAG/USD": {
+      "above": [],
+      "below": []
     }
   },
   "trading": {
@@ -16,16 +20,18 @@
     "risk_pct": 1.0,
     "max_size": {
       "XAU/USD": 1,
-      "EUR/USD": 10000
+      "EUR/USD": 10000,
+      "XAG/USD": 50
     },
     "epics": {
       "XAU/USD": "GOLD",
-      "EUR/USD": "EURUSD"
+      "EUR/USD": "EURUSD",
+      "XAG/USD": "SILVER"
     },
     "stop_atr": 1.5,
     "target_atr": 3.0,
-    "max_open_positions": 2,
-    "max_trades_per_day": 4,
+    "max_open_positions": 3,
+    "max_trades_per_day": 6,
     "max_daily_loss_pct": 3.0,
     "max_spread_atr": 0.3,
     "close_on_opposite_signal": true,

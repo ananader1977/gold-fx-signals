@@ -1,5 +1,7 @@
 # Gold & EUR/USD Signals
 
+Instruments: **XAU/USD (gold)**, **EUR/USD**, **XAG/USD (silver)**. Add or remove them in `config.json` (`symbols` for alerts, `trading.epics` for trading).
+
 A free tool for watching **XAU/USD (gold)** and **EUR/USD**:
 
 - **Dashboard** (`index.html`, hosted on GitHub Pages) — live price, 1-hour chart, indicator signal (BUY bias / SELL bias / WAIT), example stop-loss and take-profit, and position size based on your risk.

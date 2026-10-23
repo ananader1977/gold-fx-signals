@@ -10,12 +10,31 @@ from datetime import datetime, timezone
 KEY = os.environ.get("TWELVEDATA_KEY", "")
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
-DP = {"XAU/USD": 2, "EUR/USD": 5}
+DP = {"XAU/USD": 2, "EUR/USD": 5, "XAG/USD": 3}
+CACHE = ".candle_cache.json"
 
 
 def get(url, params):
     with urllib.request.urlopen(url + "?" + urllib.parse.urlencode(params), timeout=30) as r:
         return json.load(r)
+
+
+def time_series(sym):
+    """1h candles from Twelve Data, cached for 10 min so alert.py and trade.py share one API call."""
+    import time
+    try:
+        cache = json.load(open(CACHE))
+    except (FileNotFoundError, json.JSONDecodeError):
+        cache = {}
+    hit = cache.get(sym)
+    if hit and time.time() - hit["t"] < 600:
+        return hit["data"]
+    j = get("https://api.twelvedata.com/time_series",
+            {"symbol": sym, "interval": "1h", "outputsize": 200, "timezone": "UTC", "apikey": KEY})
+    if j.get("status") != "error":
+        cache[sym] = {"t": time.time(), "data": j}
+        json.dump(cache, open(CACHE, "w"))
+    return j
 
 
 def telegram(text, strict=False):
@@ -108,8 +127,7 @@ def main():
     last_sig = state.get("last_signal", {})
 
     for sym, targets in cfg["symbols"].items():
-        j = get("https://api.twelvedata.com/time_series",
-                {"symbol": sym, "interval": "1h", "outputsize": 200, "timezone": "UTC", "apikey": KEY})
+        j = time_series(sym)
         if j.get("status") == "error":
             print(sym, "error:", j.get("message")); continue
         closes = [float(v["close"]) for v in reversed(j["values"])]

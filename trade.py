@@ -28,12 +28,12 @@ DEFAULTS = {
     "enabled": False,               # master switch
     "mode": "demo",                 # "demo" or "live"
     "risk_pct": 1.0,                # % of balance risked per trade (distance to stop)
-    "max_size": {"XAU/USD": 1, "EUR/USD": 10000},   # hard cap per order
-    "epics": {"XAU/USD": "GOLD", "EUR/USD": "EURUSD"},
+    "max_size": {"XAU/USD": 1, "EUR/USD": 10000, "XAG/USD": 50},   # hard cap per order
+    "epics": {"XAU/USD": "GOLD", "EUR/USD": "EURUSD", "XAG/USD": "SILVER"},
     "stop_atr": 1.5,
     "target_atr": 3.0,
-    "max_open_positions": 2,
-    "max_trades_per_day": 4,
+    "max_open_positions": 3,
+    "max_trades_per_day": 6,
     "max_daily_loss_pct": 3.0,      # stop opening trades after this drawdown today
     "max_spread_atr": 0.3,          # skip if spread > 30% of ATR
     "close_on_opposite_signal": True,
@@ -121,8 +121,7 @@ def load_json(path, default):
 
 
 def candles(sym):
-    j = alert.get("https://api.twelvedata.com/time_series",
-                  {"symbol": sym, "interval": "1h", "outputsize": 200, "timezone": "UTC", "apikey": alert.KEY})
+    j = alert.time_series(sym)
     if j.get("status") == "error":
         raise RuntimeError(f"Twelve Data {sym}: {j.get('message')}")
     rows = list(reversed(j["values"]))
@@ -184,6 +183,7 @@ def main():
     print(f"[{label}] {acc['name']} balance {acc['balance']:.2f} {acc['currency']} available {acc['available']:.2f}")
 
     if check_only:
+        missing = []
         for sym, epic in t["epics"].items():
             try:
                 m = cap.market(epic)
@@ -191,8 +191,11 @@ def main():
                       f"status {m['status']} min size {m['min_size']} step {m['step']}")
             except RuntimeError as e:
                 print(f"  {sym} -> epic {epic} NOT FOUND ({e}). Candidates:",
-                      cap.search(sym.replace("/", "") if sym != "XAU/USD" else "gold"))
+                      cap.search({"XAU/USD": "gold", "XAG/USD": "silver"}.get(sym, sym.replace("/", ""))))
+                missing.append(sym)
         print("  open positions:", cap.positions() or "none")
+        if missing:
+            sys.exit(f"Market name not found for: {', '.join(missing)} (see candidates above)")
         return
 
     state = load_json(STATE_FILE, {})
