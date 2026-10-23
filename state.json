@@ -2,6 +2,9 @@
   "fired": [],
   "last_signal": {
     "XAU/USD": "SELL",
-    "EUR/USD": "WAIT"
+    "EUR/USD": "SELL"
+  },
+  "errors": {
+    "XAG/USD": "This symbol is available starting with the Grow or Venture plan. Consider upgrading now at https://twelvedata.com/pricing"
   }
 }
