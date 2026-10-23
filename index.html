@@ -145,6 +145,7 @@ function fmt(sym,v){return v==null||isNaN(v)?"—":v.toFixed(SYMBOLS[sym].dp)}
 function buildCards(){
   $("cards").innerHTML=Object.entries(SYMBOLS).map(([sym,m])=>`<div class="card" id="c-${sym.replace("/","")}">
    <div class="row" style="justify-content:space-between"><div><b>${sym}</b> <span class="mut">${m.name}</span></div><span class="badge WAIT" data-k="sig">—</span></div>
+   <div data-k="bot"></div>
    <div class="price" data-k="price">—</div><div class="mut" data-k="score"></div>
    <div class="chart" data-k="chart"></div>
    <table data-k="tbl"></table><ul data-k="why" class="mut" style="margin-top:8px"></ul><div data-k="plan" style="margin-top:8px"></div></div>`).join("");
@@ -161,15 +162,16 @@ function render(){
     if(!c){q("score").textContent=S.err[sym]?"No data: "+S.err[sym]:"Loading…";continue}
     const a=analyse(c);
     q("price").textContent=fmt(sym,a.p);
-    const sig=q("sig");sig.className="badge "+a.signal;sig.textContent=a.signal==="WAIT"?"WAIT — no clear edge":a.signal+" bias";
-    q("score").textContent=`Score ${a.score>0?"+":""}${a.score} (buy ≥ +3, sell ≤ −3) · 1h candles`;
+    const sig=q("sig");sig.className="badge "+a.signal;const traded=!!S.bot?.items?.[sym];sig.textContent=(traded?"1h view: ":"")+(a.signal==="WAIT"?"WAIT — no clear edge":a.signal+" bias");
+    q("score").textContent=`1h score ${a.score>0?"+":""}${a.score} (buy ≥ +3, sell ≤ −3) · `+(traded?"for alerts only, the bot does not trade it":"not auto-traded — alerts only");
     q("tbl").innerHTML=`<tr><td>EMA 20 / 50</td><td>${fmt(sym,a.e20)} / ${fmt(sym,a.e50)}</td></tr><tr><td>RSI 14</td><td>${a.r?.toFixed(1)}</td></tr><tr><td>Bollinger low / high</td><td>${fmt(sym,a.b?.lo)} / ${fmt(sym,a.b?.up)}</td></tr><tr><td>ATR 14 (avg hourly range)</td><td>${fmt(sym,a.A)}</td></tr>`;
     q("why").innerHTML=a.why.map(w=>`<li>• ${w}</li>`).join("");
-    if(a.plan){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
+    if(a.plan&&!traded){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
       q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="XAU/USD"?2:0)} ${sym==="XAU/USD"?"oz":sym.split("/")[0]}</td></tr></table><small>Size assumes 1 unit = 1 oz gold, 1 EUR or 1 GBP. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
     else q("plan").innerHTML="";
     try{const ch=S.charts[sym];ch.s.setData(c.map(x=>({...x})));const e=ema(c.map(x=>x.close),50);ch.e50.setData(c.map((x,i)=>({time:x.time,value:e[i]})).filter(x=>x.value!=null))}catch(e){log(`${sym} chart: ${e.message}`)}
   }
+  renderBot();
 }
 function renderAlerts(){
   $("alertList").innerHTML=S.alerts.length?S.alerts.map((a,i)=>`<li><span>${a.sym} ${a.dir==="above"?"≥":"≤"} ${a.price} ${a.fired?"<b style='color:var(--buy)'>✓ hit</b>":""}</span><span><button class="ghost" data-del="${i}">Remove</button></span></li>`).join(""):'<li class="mut">No alerts yet</li>';
@@ -213,6 +215,28 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)tick(false
 
 const cfg=store.get("cfg",{});Object.assign(S,cfg);S.alerts=store.get("alerts",[]);
 $("apiKey").value=S.key||"";$("poll").value=S.poll;$("balance").value=S.balance;$("riskPct").value=S.riskPct;
+// ---------- Bot's own signal (from equity.json → signals, written by trade.py each run) ----------
+function renderBot(){
+  for(const sym of Object.keys(SYMBOLS)){
+    const el=document.querySelector(`#c-${sym.replace("/","")} [data-k=bot]`);if(!el)continue;
+    const b=S.bot?.items?.[sym];
+    if(!b){el.innerHTML="";continue}
+    const ok=(c,t)=>`<li>${c?"<span class='up'>✓</span>":"<span class='down'>✗</span>"} ${t}</li>`;
+    const up=b.ema20>b.ema50,above=b.close>b.ema50,mh=b.macd_hist>0;
+    const label=b.signal==="BUY"?"BUY":b.signal==="SELL"&&b.long_only?"NO BUY (bearish)":b.signal;
+    const cls=b.signal==="BUY"?"BUY":b.signal==="SELL"?"SELL":"WAIT";
+    const age=Math.round((Date.now()-Date.parse(S.bot.updated))/60000);
+    const stale=age>150?` <b class="down">— bot hasn't run for ${Math.round(age/60)}h</b>`:"";
+    const stop=b.close-b.stop_atr*b.atr,tgt=b.close+b.target_atr*b.atr;
+    el.innerHTML=`<div style="border:1px solid var(--acc);border-radius:10px;padding:10px;margin:8px 0">
+      <div class="row" style="justify-content:space-between"><b>Bot signal · ${b.timeframe} ${b.rule}${b.long_only?", buy-only":""}</b><span class="badge ${cls}">${label}</span></div>
+      <div style="margin:6px 0"><b>Now:</b> ${b.action||"—"}</div>
+      <ul class="mut" style="margin:4px 0">${ok(up,`EMA20 ${fmt(sym,b.ema20)} ${up?">":"<"} EMA50 ${fmt(sym,b.ema50)}`)}${ok(above,`Close ${fmt(sym,b.close)} ${above?">":"<"} EMA50`)}${ok(mh,`MACD histogram ${mh?"above":"below"} 0`)}</ul>
+      <div class="mut">Buys only when all three are ✓ · stop ${b.stop_atr}×ATR, target ${b.target_atr}×ATR · risk ${b.risk_pct}%</div>
+      <div class="mut">If it bought now: stop ≈ ${fmt(sym,stop)}, target ≈ ${fmt(sym,tgt)} (4h ATR ${fmt(sym,b.atr)})</div>
+      <small class="mut">Based on the ${b.timeframe} candle that closed ${b.candle?new Date(Date.parse(b.candle)+(b.timeframe==="4h"?4:1)*3600e3).toLocaleString():"—"} · checked ${age} min ago${stale}</small></div>`;
+  }
+}
 // ---------- Capital.com account (from equity.json written by the bot) ----------
 let acChart=null,acEqS=null,acBalS=null;
 function money(v,c){return v==null?"—":Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+" "+(c||"")}
@@ -220,6 +244,7 @@ async function loadAccount(){
   try{
     const r=await fetch("equity.json?ts="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error("not created yet");
     const d=await r.json(),L=d.latest||{},c=d.currency||"";
+    S.bot=d.signals||null;renderBot();if(S.candles&&Object.keys(S.candles).length)render();
     $("acMode").textContent=d.mode||"—";$("acMode").className="badge "+(d.mode==="LIVE"?"SELL":"BUY");
     $("acBal").textContent=money(L.balance,c);$("acEq").textContent=money(L.equity,c);$("acAvail").textContent=money(L.available,c);
     const s=d.start?.balance,chg=L.equity!=null&&s?L.equity-s:null;
@@ -235,8 +260,8 @@ async function loadAccount(){
     acEqS.setData(pts.map(p=>({time:p.ts,value:p.e})));acBalS.setData(pts.map(p=>({time:p.ts,value:p.b})));acChart.timeScale().fitContent();
   }catch(e){$("acUpd").textContent="Account data: "+e.message}
 }
-loadAccount();setInterval(loadAccount,5*60e3);
-buildCards();renderAlerts();if(S.key)start();else $("status").textContent="Enter your API key to start";
+buildCards();loadAccount();setInterval(loadAccount,5*60e3);
+renderAlerts();if(S.key)start();else $("status").textContent="Enter your API key to start";
 </script>
 </body>
 </html>

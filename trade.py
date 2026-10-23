@@ -212,7 +212,7 @@ def blocked_time(now, t):
     return None
 
 
-def snapshot(cap, label):
+def snapshot(cap, label, signals=None):
     """Save balance, equity and open positions to equity.json for the dashboard's account card."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     acc, pos = cap.account(), cap.positions()
@@ -225,6 +225,8 @@ def snapshot(cap, label):
                     "open_pl": round(upl, 2), "equity": round(acc["balance"] + upl, 2),
                     "positions": [{k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit", "upl", "created")}
                                   for p in pos]}
+    if signals is not None:
+        eq["signals"] = signals   # the bot's own view per instrument, shown on the dashboard
     eq["history"].append([now, eq["latest"]["balance"], eq["latest"]["equity"]])
     eq["history"] = eq["history"][-5000:]
     json.dump(eq, open(EQUITY_FILE, "w"), indent=1)
@@ -341,6 +343,7 @@ def main():
         halt = blocked_time(now, t)
 
     positions = cap.positions()
+    bot_signals = {}
     for sym, epic in t["epics"].items():
         try:
             c = candles(sym, t["timeframe"])
@@ -350,6 +353,16 @@ def main():
         _, signal, score, r = fn([x["close"] for x in c])
         a = atr(c)
         mine = [p for p in positions if p["epic"] == epic]
+        closes = [x["close"] for x in c]
+        e20, e50 = alert.ema(closes, 20)[-1], alert.ema(closes, 50)[-1]
+        mh = alert.macd_hist(closes)[-1]
+        dp = alert.DP.get(sym, 4)
+        info = bot_signals[sym] = {
+            "signal": signal, "score": score, "timeframe": t["timeframe"], "rule": t["signal"],
+            "long_only": t["long_only"], "candle": c[-1]["t"].strftime("%Y-%m-%dT%H:%MZ") if "t" in c[-1] else None,
+            "close": round(closes[-1], dp), "ema20": round(e20, dp), "ema50": round(e50, dp),
+            "macd_hist": round(mh, dp + 2), "atr": round(a, dp), "stop_atr": t["stop_atr"], "target_atr": t["target_atr"],
+            "risk_pct": t["risk_pct"], "action": ""}
         print(f"{sym}: {t['timeframe']} {t['signal']} signal {signal} score {score:+d} ATR {a:.5f} open {len(mine)}")
 
         # reset the 'already entered' flag once the signal goes away
@@ -365,20 +378,28 @@ def main():
                     positions = [q for q in positions if q["dealId"] != p["dealId"]]
                     mine = [q for q in mine if q["dealId"] != p["dealId"]]
 
-        if signal == "WAIT" or mine or state["entered"].get(sym) == signal:
-            continue
+        if mine:
+            info["action"] = f"holding {mine[0]['direction']} position"; continue
+        if signal == "WAIT":
+            info["action"] = "waiting: trend rules not all agreeing" if t["signal"] == "trend" else "waiting: no clear signal"; continue
         if t["long_only"] and signal == "SELL":
-            continue
+            info["action"] = "bearish: no buys (buy-only)"; continue
+        if state["entered"].get(sym) == signal:
+            info["action"] = f"already traded this {signal} signal; waits for it to change"; continue
         if halt:
+            info["action"] = f"entry blocked: {halt}"
             print(f"  skip entry: {halt}"); continue
         if len(positions) >= t["max_open_positions"]:
+            info["action"] = "entry blocked: max open positions"
             print("  skip entry: max open positions"); continue
 
         m = cap.market(epic)
         if m["status"] != "TRADEABLE" or not m["bid"]:
+            info["action"] = f"entry blocked: market {m['status']}"
             print(f"  skip entry: market status {m['status']}"); continue
         spread = m["offer"] - m["bid"]
         if spread > t["max_spread_atr"] * a:
+            info["action"] = "entry blocked: spread too wide"
             print(f"  skip entry: spread {spread} too wide vs ATR"); continue
 
         entry = m["offer"] if signal == "BUY" else m["bid"]
@@ -396,10 +417,12 @@ def main():
         size = min(risk_cash / stop_dist, t["max_size"].get(sym, 1))
         size = round_step(size, m["step"])
         if size < m["min_size"]:
+            info["action"] = f"entry blocked: size below broker minimum at {t['risk_pct']}% risk"
             print(f"  skip entry: size {size} below broker minimum {m['min_size']} at {t['risk_pct']}% risk"); continue
 
         conf = cap.open(epic, signal, size, stop, target)
         ok = conf.get("dealStatus") == "ACCEPTED"
+        info["action"] = f"opened {signal} {size} (stop {stop}, target {target})" if ok else "order rejected"
         state["trades_today"] += 1 if ok else 0
         if ok:
             state["entered"][sym] = signal
@@ -411,7 +434,7 @@ def main():
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
     json.dump(state, open(STATE_FILE, "w"), indent=2)
-    snapshot(cap, label)
+    snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
 
 
 if __name__ == "__main__":
