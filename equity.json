@@ -1,0 +1,49 @@
+{
+ "start": {
+  "time": "2026-10-22T10:58:00Z",
+  "balance": 1002.81
+ },
+ "history": [
+  [
+   "2026-10-22T10:58:00Z",
+   1002.81,
+   1002.81
+  ],
+  [
+   "2026-10-23T12:17:11Z",
+   1039.89,
+   1048.22
+  ]
+ ],
+ "mode": "DEMO",
+ "currency": "AED",
+ "updated": "2026-10-23T12:17:11Z",
+ "latest": {
+  "balance": 1039.89,
+  "available": 991.4,
+  "open_pl": 8.33,
+  "equity": 1048.22,
+  "positions": [
+   {
+    "epic": "EURUSD",
+    "direction": "SELL",
+    "size": 2000,
+    "level": 1.12091,
+    "stop": 1.12229,
+    "profit": 1.11814,
+    "upl": 10.8,
+    "created": "2026-10-23T05:09:52.833"
+   },
+   {
+    "epic": "GOLD",
+    "direction": "SELL",
+    "size": 0.1,
+    "level": 4017.29,
+    "stop": 4043.0,
+    "profit": 3965.54,
+    "upl": -2.47,
+    "created": "2026-10-23T03:27:56.054"
+   }
+  ]
+ }
+}
