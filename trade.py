@@ -28,8 +28,8 @@ DEFAULTS = {
     "enabled": False,               # master switch
     "mode": "demo",                 # "demo" or "live"
     "risk_pct": 1.0,                # % of balance risked per trade (distance to stop)
-    "max_size": {"XAU/USD": 1, "EUR/USD": 10000, "XAG/USD": 50},   # hard cap per order
-    "epics": {"XAU/USD": "GOLD", "EUR/USD": "EURUSD", "XAG/USD": "SILVER"},
+    "max_size": {"XAU/USD": 1, "EUR/USD": 10000, "GBP/USD": 10000},   # hard cap per order
+    "epics": {"XAU/USD": "GOLD", "EUR/USD": "EURUSD", "GBP/USD": "GBPUSD"},
     "stop_atr": 1.5,
     "target_atr": 3.0,
     "max_open_positions": 3,

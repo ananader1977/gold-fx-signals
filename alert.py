@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 KEY = os.environ.get("TWELVEDATA_KEY", "")
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
-DP = {"XAU/USD": 2, "EUR/USD": 5, "XAG/USD": 3}
+DP = {"XAU/USD": 2, "EUR/USD": 5, "XAG/USD": 3, "GBP/USD": 5}
 CACHE = ".candle_cache.json"
 
 

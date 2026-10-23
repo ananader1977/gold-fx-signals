@@ -53,7 +53,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
   <div class="card">
     <b>Price-target alerts</b>
     <div class="row" style="margin-top:8px">
-      <select id="aSym"><option>XAU/USD</option><option>EUR/USD</option><option>XAG/USD</option></select>
+      <select id="aSym"><option>XAU/USD</option><option>EUR/USD</option><option>GBP/USD</option></select>
       <select id="aDir"><option value="above">rises to / above</option><option value="below">falls to / below</option></select>
       <input id="aPrice" type="number" step="any" placeholder="price">
       <button id="addAlert">Add alert</button>
@@ -67,7 +67,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
 </main>
 
 <script>
-const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5},"XAG/USD":{name:"Silver",dp:3}};
+const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5},"GBP/USD":{name:"British Pound / US Dollar",dp:5}};
 const S = { err:{}, key:"", poll:90, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
 const $ = id => document.getElementById(id);
 const store = { get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
@@ -151,7 +151,7 @@ function render(){
     q("tbl").innerHTML=`<tr><td>EMA 20 / 50</td><td>${fmt(sym,a.e20)} / ${fmt(sym,a.e50)}</td></tr><tr><td>RSI 14</td><td>${a.r?.toFixed(1)}</td></tr><tr><td>Bollinger low / high</td><td>${fmt(sym,a.b?.lo)} / ${fmt(sym,a.b?.up)}</td></tr><tr><td>ATR 14 (avg hourly range)</td><td>${fmt(sym,a.A)}</td></tr>`;
     q("why").innerHTML=a.why.map(w=>`<li>• ${w}</li>`).join("");
     if(a.plan){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
-      q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="EUR/USD"?0:2)} ${sym==="EUR/USD"?"EUR":"oz"}</td></tr></table><small>Size assumes 1 unit = 1 oz (gold, silver) or 1 EUR. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
+      q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="XAU/USD"?2:0)} ${sym==="XAU/USD"?"oz":sym.split("/")[0]}</td></tr></table><small>Size assumes 1 unit = 1 oz gold, 1 EUR or 1 GBP. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
     else q("plan").innerHTML="";
     try{const ch=S.charts[sym];ch.s.setData(c.map(x=>({...x})));const e=ema(c.map(x=>x.close),50);ch.e50.setData(c.map((x,i)=>({time:x.time,value:e[i]})).filter(x=>x.value!=null))}catch(e){log(`${sym} chart: ${e.message}`)}
   }

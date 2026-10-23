@@ -1,6 +1,6 @@
 # Gold & EUR/USD Signals
 
-Instruments: **XAU/USD (gold)**, **EUR/USD**, **XAG/USD (silver)**. Add or remove them in `config.json` (`symbols` for alerts, `trading.epics` for trading).
+Instruments: **XAU/USD (gold)**, **EUR/USD**, **GBP/USD**. Add or remove them in `config.json` (`symbols` for alerts, `trading.epics` for trading).
 
 A free tool for watching **XAU/USD (gold)** and **EUR/USD**:
 

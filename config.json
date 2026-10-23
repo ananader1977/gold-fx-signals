@@ -9,7 +9,7 @@
       "above": [],
       "below": []
     },
-    "XAG/USD": {
+    "GBP/USD": {
       "above": [],
       "below": []
     }
@@ -21,12 +21,12 @@
     "max_size": {
       "XAU/USD": 1,
       "EUR/USD": 10000,
-      "XAG/USD": 50
+      "GBP/USD": 10000
     },
     "epics": {
       "XAU/USD": "GOLD",
       "EUR/USD": "EURUSD",
-      "XAG/USD": "SILVER"
+      "GBP/USD": "GBPUSD"
     },
     "stop_atr": 1.5,
     "target_atr": 3.0,
