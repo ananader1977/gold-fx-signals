@@ -17,7 +17,7 @@
   "trading": {
     "enabled": true,
     "mode": "demo",
-    "risk_pct": 0.5,
+    "risk_pct": 1.0,
     "max_size": {
       "XAU/USD": 1
     },
