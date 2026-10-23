@@ -215,7 +215,10 @@ def main():
 
     positions = cap.positions()
     for sym, epic in t["epics"].items():
-        c = candles(sym)
+        try:
+            c = candles(sym)
+        except RuntimeError as e:
+            print(f"{sym}: skipped, no price data ({e})"); continue
         _, signal, score, r = alert.analyse([x["close"] for x in c])
         a = atr(c)
         mine = [p for p in positions if p["epic"] == epic]

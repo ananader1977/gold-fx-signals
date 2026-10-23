@@ -68,7 +68,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
 
 <script>
 const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5},"XAG/USD":{name:"Silver",dp:3}};
-const S = { key:"", poll:90, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
+const S = { err:{}, key:"", poll:90, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
 const $ = id => document.getElementById(id);
 const store = { get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
 
@@ -104,11 +104,19 @@ async function td(path,params){
   const res=await fetch(u);const j=await res.json();if(j.status==="error")throw new Error(j.message);return j;
 }
 async function fetchCandles(){
+  let ok=0;
   for(const sym of Object.keys(SYMBOLS)){
-    const j=await td("time_series",{symbol:sym,interval:"1h",outputsize:200,timezone:"UTC"});
-    S.candles[sym]=j.values.map(v=>({time:Math.floor(Date.parse(v.datetime.replace(" ","T")+"Z")/1000),open:+v.open,high:+v.high,low:+v.low,close:+v.close})).reverse();
+    try{
+      const j=await td("time_series",{symbol:sym,interval:"1h",outputsize:200,timezone:"UTC"});
+      if(!j.values||!j.values.length)throw new Error("no data returned");
+      const seen=new Set();
+      S.candles[sym]=j.values.map(v=>({time:Math.floor(Date.parse(v.datetime.replace(" ","T")+"Z")/1000),open:+v.open,high:+v.high,low:+v.low,close:+v.close}))
+        .reverse().filter(c=>!seen.has(c.time)&&seen.add(c.time));
+      S.err[sym]="";ok++;
+    }catch(e){S.err[sym]=e.message;log(`${sym}: ${e.message}`)}
   }
-  S.lastCandleFetch=Date.now();log("Candles refreshed");
+  if(ok)S.lastCandleFetch=Date.now();
+  log(`Candles refreshed (${ok}/${Object.keys(SYMBOLS).length})`);
 }
 async function fetchPrices(){
   const j=await td("price",{symbol:Object.keys(SYMBOLS).join(",")});
@@ -133,7 +141,10 @@ function buildCards(){
 }
 function render(){
   for(const sym of Object.keys(SYMBOLS)){
-    const c=S.candles[sym];if(!c)continue;const a=analyse(c);const q=k=>document.querySelector(`#c-${sym.replace("/","")} [data-k=${k}]`);
+    const q=k=>document.querySelector(`#c-${sym.replace("/","")} [data-k=${k}]`);
+    const c=S.candles[sym];
+    if(!c){q("score").textContent=S.err[sym]?"No data: "+S.err[sym]:"Loading…";continue}
+    const a=analyse(c);
     q("price").textContent=fmt(sym,a.p);
     const sig=q("sig");sig.className="badge "+a.signal;sig.textContent=a.signal==="WAIT"?"WAIT — no clear edge":a.signal+" bias";
     q("score").textContent=`Score ${a.score>0?"+":""}${a.score} (buy ≥ +3, sell ≤ −3) · 1h candles`;
@@ -142,7 +153,7 @@ function render(){
     if(a.plan){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
       q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="EUR/USD"?0:2)} ${sym==="EUR/USD"?"EUR":"oz"}</td></tr></table><small>Size assumes 1 unit = 1 oz (gold, silver) or 1 EUR. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
     else q("plan").innerHTML="";
-    const ch=S.charts[sym];ch.s.setData(c);const e=ema(c.map(x=>x.close),50);ch.e50.setData(c.map((x,i)=>({time:x.time,value:e[i]})).filter(x=>x.value!=null));
+    try{const ch=S.charts[sym];ch.s.setData(c.map(x=>({...x})));const e=ema(c.map(x=>x.close),50);ch.e50.setData(c.map((x,i)=>({time:x.time,value:e[i]})).filter(x=>x.value!=null))}catch(e){log(`${sym} chart: ${e.message}`)}
   }
 }
 function renderAlerts(){

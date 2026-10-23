@@ -4,7 +4,7 @@ Secrets needed (repo Settings > Secrets and variables > Actions):
   TWELVEDATA_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 Targets live in config.json. Fired-alert memory lives in state.json (committed back by the workflow).
 """
-import json, os, sys, urllib.parse, urllib.request
+import json, os, sys, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
 KEY = os.environ.get("TWELVEDATA_KEY", "")
@@ -15,8 +15,18 @@ CACHE = ".candle_cache.json"
 
 
 def get(url, params):
-    with urllib.request.urlopen(url + "?" + urllib.parse.urlencode(params), timeout=30) as r:
-        return json.load(r)
+    """GET JSON. HTTP errors come back as {"status": "error", "message": ...} instead of crashing."""
+    try:
+        with urllib.request.urlopen(url + "?" + urllib.parse.urlencode(params), timeout=30) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode())
+        except Exception:
+            body = {}
+        return {"status": "error", "code": e.code, "message": body.get("message") or f"HTTP {e.code}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)[:200]}
 
 
 def time_series(sym):
@@ -125,11 +135,15 @@ def main():
         state = {}
     fired = set(state.get("fired", []))
     last_sig = state.get("last_signal", {})
+    errors = {}
 
     for sym, targets in cfg["symbols"].items():
         j = time_series(sym)
-        if j.get("status") == "error":
-            print(sym, "error:", j.get("message")); continue
+        if j.get("status") == "error" or not j.get("values"):
+            msg = j.get("message", "no data")
+            print(sym, "error:", msg)
+            errors[sym] = msg[:200]
+            continue
         closes = [float(v["close"]) for v in reversed(j["values"])]
         p, signal, score, r = analyse(closes)
         dp = DP.get(sym, 4)
@@ -149,7 +163,7 @@ def main():
             telegram(f"📈 {sym}: indicator signal now {signal} bias (score {score:+d}, RSI {r:.0f})\nPrice {p:.{dp}f}. Review the chart before trading.")
         last_sig[sym] = signal
 
-    json.dump({"fired": sorted(fired), "last_signal": last_sig},
+    json.dump({"fired": sorted(fired), "last_signal": last_sig, "errors": errors},
               open("state.json", "w"), indent=2)
 
 
