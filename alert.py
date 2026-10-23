@@ -30,7 +30,7 @@ def get(url, params):
 
 
 def time_series(sym):
-    """1h candles from Twelve Data, cached for 10 min so alert.py and trade.py share one API call."""
+    """1h candles from Twelve Data (1000 bars, enough to build 4h candles), cached for 10 min so alert.py and trade.py share one API call."""
     import time
     try:
         cache = json.load(open(CACHE))
@@ -40,7 +40,7 @@ def time_series(sym):
     if hit and time.time() - hit["t"] < 600:
         return hit["data"]
     j = get("https://api.twelvedata.com/time_series",
-            {"symbol": sym, "interval": "1h", "outputsize": 200, "timezone": "UTC", "apikey": KEY})
+            {"symbol": sym, "interval": "1h", "outputsize": 1000, "timezone": "UTC", "apikey": KEY})
     if j.get("status") != "error":
         cache[sym] = {"t": time.time(), "data": j}
         json.dump(cache, open(CACHE, "w"))
@@ -144,7 +144,7 @@ def main():
             print(sym, "error:", msg)
             errors[sym] = msg[:200]
             continue
-        closes = [float(v["close"]) for v in reversed(j["values"])]
+        closes = [float(v["close"]) for v in reversed(j["values"])][-200:]  # alerts keep the 200-bar 1h view
         p, signal, score, r = analyse(closes)
         dp = DP.get(sym, 4)
         print(f"{sym} {p:.{dp}f} {signal} score={score} rsi={r:.1f}")

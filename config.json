@@ -17,30 +17,24 @@
   "trading": {
     "enabled": true,
     "mode": "demo",
-    "risk_pct": 1.0,
+    "risk_pct": 0.5,
     "max_size": {
-      "XAU/USD": 1,
-      "EUR/USD": 10000,
-      "GBP/USD": 10000
+      "XAU/USD": 1
     },
     "epics": {
-      "XAU/USD": "GOLD",
-      "EUR/USD": "EURUSD",
-      "GBP/USD": "GBPUSD"
+      "XAU/USD": "GOLD"
     },
-    "stop_atr": 1.5,
-    "target_atr": 3.0,
-    "max_open_positions": 3,
-    "max_trades_per_day": 6,
+    "stop_atr": 2.0,
+    "target_atr": 4.0,
+    "max_open_positions": 1,
+    "max_trades_per_day": 3,
     "max_daily_loss_pct": 3.0,
     "max_spread_atr": 0.3,
     "close_on_opposite_signal": true,
-    "no_trade_hours_utc": [
-      [
-        12,
-        15
-      ]
-    ],
-    "no_trade_friday_after_utc": 18
+    "no_trade_hours_utc": [],
+    "no_trade_friday_after_utc": 18,
+    "timeframe": "4h",
+    "signal": "trend",
+    "long_only": true
   }
 }

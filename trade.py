@@ -1,6 +1,9 @@
 """Capital.com auto-trader (DEMO by default). Runs on GitHub Actions after alert.py.
 
-Uses the same signal as the dashboard (1h candles, closed candles only).
+Signal (set in config.json):
+  timeframe "4h" + signal "trend" + long_only  -> backtested gold setup (Oct 2026): buy when, on closed 4h
+  candles, EMA20 > EMA50, price > EMA50 and MACD histogram > 0; close longs when all three turn bearish.
+  timeframe "1h" + signal "score" -> the original dashboard score (failed the 4.5-year backtest).
 Every order is sent with a stop loss and take profit attached.
 
 Secrets (repo Settings > Secrets and variables > Actions):
@@ -38,6 +41,9 @@ DEFAULTS = {
     "max_daily_loss_pct": 3.0,      # stop opening trades after this drawdown today
     "max_spread_atr": 0.3,          # skip if spread > 30% of ATR
     "close_on_opposite_signal": True,
+    "timeframe": "1h",              # "1h" or "4h" (4h candles are built from 1h, aligned to 00/04/08.. UTC)
+    "signal": "score",              # "score" = dashboard score, "trend" = EMA20/EMA50/MACD all agree
+    "long_only": False,             # True = never open SELL positions (SELL signal only closes longs)
     "no_trade_hours_utc": [[12, 15]],   # skip entries 12:00-15:00 UTC (US data releases)
     "no_trade_friday_after_utc": 18,    # no new trades late Friday (weekend gap risk)
 }
@@ -136,16 +142,48 @@ def load_json(path, default):
         return default
 
 
-def candles(sym):
+WINDOW = 199  # candles per signal calculation (same as the backtest)
+
+
+def candles(sym, timeframe="1h"):
+    """Closed candles only. 4h candles are grouped from 1h exactly as in backtest/engine.py."""
     j = alert.time_series(sym)
-    if j.get("status") == "error":
-        raise RuntimeError(f"Twelve Data {sym}: {j.get('message')}")
+    if j.get("status") == "error" or not j.get("values"):
+        raise RuntimeError(f"Twelve Data {sym}: {j.get('message', 'no data')}")
     rows = list(reversed(j["values"]))
+    now = datetime.now(timezone.utc)
+    c = []
+    for r in rows:
+        t = datetime.strptime(r["datetime"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        c.append({"t": t, "open": float(r["open"]), "high": float(r["high"]),
+                  "low": float(r["low"]), "close": float(r["close"])})
     # drop the still-forming hour so the signal does not flicker inside a candle
-    last = datetime.strptime(rows[-1]["datetime"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-    if (datetime.now(timezone.utc) - last).total_seconds() < 3600:
-        rows = rows[:-1]
-    return [{"high": float(r["high"]), "low": float(r["low"]), "close": float(r["close"])} for r in rows]
+    if c and (now - c[-1]["t"]).total_seconds() < 3600:
+        c = c[:-1]
+    if timeframe == "4h":
+        out = []
+        for x in c:
+            start = x["t"].replace(hour=x["t"].hour // 4 * 4)
+            if out and out[-1]["t"] == start:
+                o = out[-1]
+                o["high"], o["low"], o["close"] = max(o["high"], x["high"]), min(o["low"], x["low"]), x["close"]
+            else:
+                out.append({**x, "t": start})
+        # drop a 4h candle that has not finished yet
+        if out and (now - out[-1]["t"]).total_seconds() < 4 * 3600:
+            out = out[:-1]
+        c = out
+    return c[-WINDOW:]
+
+
+def trend_signal(closes):
+    """Trend-only signal: EMA20 vs EMA50, price vs EMA50, MACD histogram. All three must agree."""
+    p = closes[-1]
+    e20, e50 = alert.ema(closes, 20)[-1], alert.ema(closes, 50)[-1]
+    h = alert.macd_hist(closes)[-1]
+    score = (1 if e20 > e50 else -1) + (1 if p > e50 else -1) + (1 if h > 0 else -1)
+    signal = "BUY" if score == 3 else "SELL" if score == -3 else "WAIT"
+    return p, signal, score, alert.rsi(closes)
 
 
 def atr(c, n=14):
@@ -266,8 +304,18 @@ def main():
         for sym, epic in t["epics"].items():
             try:
                 m = cap.market(epic)
-                print(f"  {sym} -> epic {epic}: {m['name']} bid {m['bid']} offer {m['offer']} "
-                      f"status {m['status']} min size {m['min_size']} step {m['step']}")
+                msg = (f"{sym} -> epic {epic}: {m['name']} bid {m['bid']} offer {m['offer']} "
+                       f"status {m['status']} min size {m['min_size']} step {m['step']}")
+                print("  " + msg)
+                print("::notice::" + msg)
+                c = candles(sym, t["timeframe"])
+                a = atr(c)
+                need = m["min_size"] * t["stop_atr"] * a * (3.6725 if acc["currency"] == "AED" else 1)
+                fn = trend_signal if t["signal"] == "trend" else alert.analyse
+                _, sig, score, _ = fn([x["close"] for x in c])
+                print(f"::notice::{sym} {t['timeframe']} signal {sig} (score {score:+d}), ATR {a:.5f}; "
+                      f"min size risks {need:.2f} {acc['currency']} = {100 * need / acc['balance']:.2f}% of balance "
+                      f"(risk setting {t['risk_pct']}%)")
             except RuntimeError as e:
                 print(f"  {sym} -> epic {epic} NOT FOUND ({e}). Candidates:",
                       cap.search({"XAU/USD": "gold", "XAG/USD": "silver"}.get(sym, sym.replace("/", ""))))
@@ -295,13 +343,14 @@ def main():
     positions = cap.positions()
     for sym, epic in t["epics"].items():
         try:
-            c = candles(sym)
+            c = candles(sym, t["timeframe"])
         except RuntimeError as e:
             print(f"{sym}: skipped, no price data ({e})"); continue
-        _, signal, score, r = alert.analyse([x["close"] for x in c])
+        fn = trend_signal if t["signal"] == "trend" else alert.analyse
+        _, signal, score, r = fn([x["close"] for x in c])
         a = atr(c)
         mine = [p for p in positions if p["epic"] == epic]
-        print(f"{sym}: signal {signal} score {score:+d} ATR {a:.5f} open {len(mine)}")
+        print(f"{sym}: {t['timeframe']} {t['signal']} signal {signal} score {score:+d} ATR {a:.5f} open {len(mine)}")
 
         # reset the 'already entered' flag once the signal goes away
         if state["entered"].get(sym) and state["entered"][sym] != signal:
@@ -317,6 +366,8 @@ def main():
                     mine = [q for q in mine if q["dealId"] != p["dealId"]]
 
         if signal == "WAIT" or mine or state["entered"].get(sym) == signal:
+            continue
+        if t["long_only"] and signal == "SELL":
             continue
         if halt:
             print(f"  skip entry: {halt}"); continue
