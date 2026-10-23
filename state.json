@@ -2,7 +2,7 @@
   "fired": [],
   "last_signal": {
     "XAU/USD": "WAIT",
-    "EUR/USD": "SELL",
+    "EUR/USD": "WAIT",
     "GBP/USD": "WAIT"
   },
   "errors": {}
