@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gold & EUR/USD Signals</title>
+<title>Gold Signals</title>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root{--bg:#0f1115;--card:#171a21;--line:#2a2f3a;--txt:#e7e9ee;--mut:#8b93a5;--buy:#1fbf75;--sell:#ef4b5b;--wait:#e0b341;--acc:#4c8dff}
@@ -34,7 +34,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
 </head>
 <body>
 <header>
-  <div><h1>Gold & EUR/USD Signals</h1><small id="status">Not started</small></div>
+  <div><h1>Gold Signals</h1><small id="status">Not started</small></div>
   <div class="row"><button class="ghost" id="notifyBtn">Enable notifications</button><button id="refreshBtn">Refresh now</button></div>
 </header>
 <main>
@@ -42,12 +42,12 @@ ul{list-style:none;padding:0;margin:8px 0 0}
     <b>Setup</b> <span class="mut">— stored only in this browser</span>
     <div class="row" style="margin-top:8px">
       <label>Twelve Data API key <input id="apiKey" type="password" style="width:220px" placeholder="free key"></label>
-      <label>Poll every (sec) <input id="poll" type="number" min="30" value="120"></label>
+      <label>Poll every (sec) <input id="poll" type="number" min="30" value="60"></label>
       <label>Account balance ($) <input id="balance" type="number" value="500"></label>
       <label>Risk per trade (%) <input id="riskPct" type="number" step="0.1" value="1"></label>
       <button id="saveBtn">Save & start</button>
     </div>
-    <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses up to 4 calls (use 120 s or more to stay inside the daily limit). Polling slows to 1/3 speed when the tab is in the background; at weekends only Bitcoin updates.</p>
+    <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses 1 call, so 60 s is fine. Polling slows to 1/3 speed when the tab is in the background and pauses at weekends.</p>
   </div>
 
   <div class="card" id="acct">
@@ -68,7 +68,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
   <div class="card">
     <b>Price-target alerts</b>
     <div class="row" style="margin-top:8px">
-      <select id="aSym"><option>XAU/USD</option><option>EUR/USD</option><option>GBP/USD</option><option>BTC/USD</option></select>
+      <select id="aSym"><option>XAU/USD</option></select>
       <select id="aDir"><option value="above">rises to / above</option><option value="below">falls to / below</option></select>
       <input id="aPrice" type="number" step="any" placeholder="price">
       <button id="addAlert">Add alert</button>
@@ -78,12 +78,12 @@ ul{list-style:none;padding:0;margin:8px 0 0}
   </div>
 
   <div class="card"><b>Log</b><div id="log" class="mut"></div></div>
-  <p class="mut">Signals are mechanical readings of technical indicators on 1-hour candles. They are not financial advice and are often wrong. Always use a stop loss and confirm prices on Capital.com — broker prices and spreads differ from this data feed.</p>
+  <p class="mut">The bot trades gold only, on 4-hour trend rules (buy only, stop 2×ATR, target 4×ATR) — see the Bot signal panel. The 1-hour indicators on the card are for reference only. Nothing here is financial advice. Always use a stop loss and confirm prices on Capital.com — broker prices and spreads differ from this data feed.</p>
 </main>
 
 <script>
-const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5},"GBP/USD":{name:"British Pound / US Dollar",dp:5},"BTC/USD":{name:"Bitcoin",dp:2,crypto:true}};
-const S = { err:{}, key:"", poll:120, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
+const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2}};   // gold only: EUR/USD, GBP/USD and BTC/USD failed the backtest (Oct 2026)
+const S = { err:{}, key:"", poll:60, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
 const $ = id => document.getElementById(id);
 const store = { get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
 
@@ -165,7 +165,7 @@ function render(){
     const a=analyse(c);
     q("price").textContent=fmt(sym,a.p);
     const sig=q("sig");sig.className="badge "+a.signal;const traded=!!S.bot?.items?.[sym];sig.textContent=(traded?"1h view: ":"")+(a.signal==="WAIT"?"WAIT — no clear edge":a.signal+" bias");
-    q("score").textContent=`1h score ${a.score>0?"+":""}${a.score} (buy ≥ +3, sell ≤ −3) · `+(traded?"for alerts only, the bot does not trade it":"not auto-traded — alerts only");
+    q("score").textContent=`1h score ${a.score>0?"+":""}${a.score} · reference only — the bot uses the 4h rules below`;
     q("tbl").innerHTML=`<tr><td>EMA 20 / 50</td><td>${fmt(sym,a.e20)} / ${fmt(sym,a.e50)}</td></tr><tr><td>RSI 14</td><td>${a.r?.toFixed(1)}</td></tr><tr><td>Bollinger low / high</td><td>${fmt(sym,a.b?.lo)} / ${fmt(sym,a.b?.up)}</td></tr><tr><td>ATR 14 (avg hourly range)</td><td>${fmt(sym,a.A)}</td></tr>`;
     q("why").innerHTML=a.why.map(w=>`<li>• ${w}</li>`).join("");
     if(a.plan&&!traded){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
@@ -215,7 +215,7 @@ $("addAlert").onclick=()=>{const price=parseFloat($("aPrice").value);if(isNaN(pr
 $("alertList").onclick=e=>{const i=e.target.dataset.del;if(i!=null){S.alerts.splice(+i,1);store.set("alerts",S.alerts);renderAlerts()}};
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)tick(false)});
 
-const cfg=store.get("cfg",{});Object.assign(S,cfg);S.alerts=store.get("alerts",[]);
+const cfg=store.get("cfg",{});Object.assign(S,cfg);S.alerts=store.get("alerts",[]).filter(a=>SYMBOLS[a.sym]);
 $("apiKey").value=S.key||"";$("poll").value=S.poll;$("balance").value=S.balance;$("riskPct").value=S.riskPct;
 // ---------- Bot's own signal (from equity.json → signals, written by trade.py each run) ----------
 function renderBot(){

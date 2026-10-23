@@ -1,6 +1,6 @@
-# Gold & EUR/USD Signals
+# Gold Signals
 
-Instruments: **XAU/USD (gold)**, **EUR/USD**, **GBP/USD**. Add or remove them in `config.json` (`symbols` for alerts, `trading.epics` for trading).
+Instrument: **XAU/USD (gold) only**. The bot trades it on 4-hour trend rules (buy only). EUR/USD, GBP/USD and BTC/USD were removed in Oct 2026 after failing the backtest (see `backtest/`).
 
 A free tool for watching **XAU/USD (gold)** and **EUR/USD**:
 

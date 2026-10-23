@@ -1,19 +1,7 @@
 {
-  "signal_alerts": true,
+  "signal_alerts": false,
   "symbols": {
     "XAU/USD": {
-      "above": [],
-      "below": []
-    },
-    "EUR/USD": {
-      "above": [],
-      "below": []
-    },
-    "GBP/USD": {
-      "above": [],
-      "below": []
-    },
-    "BTC/USD": {
       "above": [],
       "below": []
     }

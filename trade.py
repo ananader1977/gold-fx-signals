@@ -32,8 +32,8 @@ DEFAULTS = {
     "enabled": False,               # master switch
     "mode": "demo",                 # "demo" or "live"
     "risk_pct": 1.0,                # % of balance risked per trade (distance to stop)
-    "max_size": {"XAU/USD": 1, "EUR/USD": 10000, "GBP/USD": 10000},   # hard cap per order
-    "epics": {"XAU/USD": "GOLD", "EUR/USD": "EURUSD", "GBP/USD": "GBPUSD"},
+    "max_size": {"XAU/USD": 1},     # hard cap per order
+    "epics": {"XAU/USD": "GOLD"},   # gold only (other instruments failed the backtest)
     "stop_atr": 1.5,
     "target_atr": 3.0,
     "max_open_positions": 3,
@@ -364,6 +364,16 @@ def main():
             "macd_hist": round(mh, dp + 2), "atr": round(a, dp), "stop_atr": t["stop_atr"], "target_atr": t["target_atr"],
             "risk_pct": t["risk_pct"], "action": ""}
         print(f"{sym}: {t['timeframe']} {t['signal']} signal {signal} score {score:+d} ATR {a:.5f} open {len(mine)}")
+
+        # Telegram when the bot's own signal changes (replaces the old 1h score alerts)
+        prev = state.setdefault("bot_signal", {}).get(sym)
+        if prev is not None and prev != signal:
+            what = {"BUY": "all 3 trend rules agree. The bot buys if it has no gold position.",
+                    "SELL": ("bearish. The bot closes any gold long and does not buy." if t["long_only"]
+                             else "bearish. The bot may sell."),
+                    "WAIT": "the rules no longer all agree. No new trades; open trades keep their stop/target."}[signal]
+            alert.telegram(f"[{label}] {sym} {t['timeframe']} signal: {prev} → {signal}\n{what}\nPrice {closes[-1]:.{dp}f}")
+        state["bot_signal"][sym] = signal
 
         # reset the 'already entered' flag once the signal goes away
         if state["entered"].get(sym) and state["entered"][sym] != signal:
