@@ -2,5 +2,8 @@
   "day": "2026-10-23",
   "start_balance": 1019.98,
   "trades_today": 2,
-  "entered": {}
+  "entered": {},
+  "bot_signal": {
+    "XAU/USD": "SELL"
+  }
 }
