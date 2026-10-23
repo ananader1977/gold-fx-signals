@@ -1,0 +1,25 @@
+name: Backtest data (manual, never trades)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    env:
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python fetch_history.py
+      - name: Save data
+        run: |
+          git config user.name "price-bot"
+          git config user.email "price-bot@users.noreply.github.com"
+          git add backtest/data
+          git diff --cached --quiet || (git commit -m "Backtest price history" && git pull --rebase && git push)
