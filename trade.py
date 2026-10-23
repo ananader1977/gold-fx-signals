@@ -97,8 +97,23 @@ class Capital:
         for p in j.get("positions", []):
             pos, mk = p.get("position", {}), p.get("market", {})
             out.append({"dealId": pos.get("dealId"), "epic": mk.get("epic"), "direction": pos.get("direction"),
-                        "size": pos.get("size"), "level": pos.get("level"), "upl": pos.get("upl")})
+                        "size": pos.get("size"), "level": pos.get("level"), "upl": pos.get("upl"),
+                        "stop": pos.get("stopLevel"), "profit": pos.get("profitLevel"),
+                        "created": pos.get("createdDateUTC"), "bid": mk.get("bid"), "offer": mk.get("offer")})
         return out
+
+    def activity(self, days=3):
+        """Recent account activity (opens, closes, stop/limit hits). Returns [] if unavailable."""
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        params = {"from": (now - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S"),
+                  "to": now.strftime("%Y-%m-%dT%H:%M:%S"), "detailed": "true"}
+        try:
+            j, _ = self.req("GET", "/history/activity", params=params)
+        except RuntimeError as e:
+            print("  (activity history unavailable:", str(e)[:120], ")")
+            return []
+        return j.get("activities", [])
 
     def open(self, epic, direction, size, stop, target):
         j, _ = self.req("POST", "/positions", {"epic": epic, "direction": direction, "size": size,
@@ -158,9 +173,48 @@ def blocked_time(now, t):
     return None
 
 
+def report(cap, t):
+    """Check every open position has a stop loss and take profit on the correct side. Never trades."""
+    def note(msg, level="notice"):
+        print(msg)
+        print(f"::{level}::{msg}")  # also shows as an annotation on the run page
+    pos = cap.positions()
+    if not pos:
+        note("No open positions.")
+    bad = 0
+    for p in pos:
+        lvl, stop, prof = p["level"], p["stop"], p["profit"]
+        buy = p["direction"] == "BUY"
+        problems = []
+        if stop is None:
+            problems.append("NO STOP LOSS")
+        elif (buy and stop >= lvl) or (not buy and stop <= lvl):
+            problems.append("stop on wrong side")
+        if prof is None:
+            problems.append("NO TAKE PROFIT")
+        elif (buy and prof <= lvl) or (not buy and prof >= lvl):
+            problems.append("take profit on wrong side")
+        rr = ""
+        if stop is not None and prof is not None and stop != lvl:
+            rr = f" reward:risk {abs(prof - lvl) / abs(lvl - stop):.2f}"
+        status = "OK" if not problems else "PROBLEM: " + ", ".join(problems)
+        bad += bool(problems)
+        note(f"{p['epic']} {p['direction']} size {p['size']} entry {lvl} stop {stop} target {prof}{rr} "
+             f"P/L {p['upl']} opened {p['created']} -> {status}", "notice" if not problems else "error")
+    acts = cap.activity()
+    for a in acts[:15]:
+        d = a.get("details") or {}
+        note(f"history {a.get('dateUTC') or a.get('date')} {a.get('epic')} {a.get('type')} {a.get('status')} "
+             f"src={a.get('source')} dir={d.get('direction')} size={d.get('size')} level={d.get('level')} "
+             f"stop={d.get('stopLevel')} limit={d.get('limitLevel') or d.get('profitLevel')}")
+    if bad:
+        sys.exit(f"{bad} position(s) without a correct stop/target")
+
+
 # ---------------- main ----------------
 def main():
     check_only = "--check" in sys.argv
+    report_only = "--report" in sys.argv
     now = datetime.now(timezone.utc)
     cfg = load_json("config.json", {})
     t = {**DEFAULTS, **cfg.get("trading", {})}
@@ -169,9 +223,9 @@ def main():
         sys.exit("Live mode requested but secret CAPITAL_LIVE_CONFIRM is not YES. Refusing to trade.")
     label = "LIVE" if live else "DEMO"
 
-    if not check_only and not t["enabled"]:
+    if not (check_only or report_only) and not t["enabled"]:
         print("Trading disabled in config.json (trading.enabled=false)."); return
-    if not check_only and alert.market_closed(now):
+    if not (check_only or report_only) and alert.market_closed(now):
         print("Market closed."); return
 
     for k in ("CAPITAL_API_KEY", "CAPITAL_IDENTIFIER", "CAPITAL_PASSWORD"):
@@ -181,6 +235,10 @@ def main():
     cap.login(os.environ["CAPITAL_IDENTIFIER"], os.environ["CAPITAL_PASSWORD"])
     acc = cap.account()
     print(f"[{label}] {acc['name']} balance {acc['balance']:.2f} {acc['currency']} available {acc['available']:.2f}")
+
+    if report_only:
+        report(cap, t)
+        return
 
     if check_only:
         missing = []
