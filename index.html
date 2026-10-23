@@ -28,6 +28,8 @@ button.ghost{background:transparent;color:var(--txt);border-color:var(--line)}
 ul{list-style:none;padding:0;margin:8px 0 0}
 #log{max-height:160px;overflow:auto;font-size:12px}
 .warn{border-color:var(--wait)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:10px}
+.kv{font-size:20px;font-weight:700}.up{color:var(--buy)}.down{color:var(--sell)}
 </style>
 </head>
 <body>
@@ -46,6 +48,19 @@ ul{list-style:none;padding:0;margin:8px 0 0}
       <button id="saveBtn">Save & start</button>
     </div>
     <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses 3 calls (use 90 s or more to stay inside the daily limit). Polling slows to 1/3 speed when the tab is in the background and pauses on weekends.</p>
+  </div>
+
+  <div class="card" id="acct">
+    <div class="row" style="justify-content:space-between"><b>Capital.com account</b><span class="badge WAIT" id="acMode">—</span></div>
+    <div class="kpis">
+      <div><small>Balance</small><div class="kv" id="acBal">—</div></div>
+      <div><small>Equity (incl. open trades)</small><div class="kv" id="acEq">—</div></div>
+      <div><small>Available</small><div class="kv" id="acAvail">—</div></div>
+      <div><small>Change since start</small><div class="kv" id="acChg">—</div></div>
+    </div>
+    <div class="chart" id="acChart" style="height:200px"></div>
+    <table id="acPos"></table>
+    <small id="acUpd">Waiting for the bot's first update…</small>
   </div>
 
   <div class="grid" id="cards"></div>
@@ -198,6 +213,29 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden)tick(false
 
 const cfg=store.get("cfg",{});Object.assign(S,cfg);S.alerts=store.get("alerts",[]);
 $("apiKey").value=S.key||"";$("poll").value=S.poll;$("balance").value=S.balance;$("riskPct").value=S.riskPct;
+// ---------- Capital.com account (from equity.json written by the bot) ----------
+let acChart=null,acEqS=null,acBalS=null;
+function money(v,c){return v==null?"—":Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+" "+(c||"")}
+async function loadAccount(){
+  try{
+    const r=await fetch("equity.json?ts="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error("not created yet");
+    const d=await r.json(),L=d.latest||{},c=d.currency||"";
+    $("acMode").textContent=d.mode||"—";$("acMode").className="badge "+(d.mode==="LIVE"?"SELL":"BUY");
+    $("acBal").textContent=money(L.balance,c);$("acEq").textContent=money(L.equity,c);$("acAvail").textContent=money(L.available,c);
+    const s=d.start?.balance,chg=L.equity!=null&&s?L.equity-s:null;
+    $("acChg").innerHTML=chg==null?"—":`<span class="${chg>=0?"up":"down"}">${chg>=0?"+":""}${money(chg,c)} (${(chg/s*100).toFixed(2)}%)</span>`;
+    const pos=L.positions||[];
+    $("acPos").innerHTML=pos.length?`<tr><td><b>Open trade</b></td><td><b>Entry → Stop / Target</b></td><td><b>P/L</b></td></tr>`+pos.map(p=>`<tr><td>${p.epic} ${p.direction} ${p.size}</td><td>${p.level} → ${p.stop??"<b class='down'>NO STOP</b>"} / ${p.profit??"<b class='down'>NO TARGET</b>"}</td><td class="${p.upl>=0?"up":"down"}">${p.upl>=0?"+":""}${Number(p.upl).toFixed(2)}</td></tr>`).join(""):`<tr><td class="mut">No open trades</td><td></td></tr>`;
+    $("acUpd").textContent=`Updated ${new Date(d.updated).toLocaleString()} · start ${money(s,c)} on ${new Date(d.start.time).toLocaleDateString()} · refreshed by the bot about hourly`;
+    if(!acChart){acChart=LightweightCharts.createChart($("acChart"),{layout:{background:{color:"transparent"},textColor:"#8b93a5"},grid:{vertLines:{color:"#20242d"},horzLines:{color:"#20242d"}},timeScale:{timeVisible:true},autoSize:true});
+      acEqS=acChart.addLineSeries({color:"#4c8dff",lineWidth:2,title:"Equity"});acBalS=acChart.addLineSeries({color:"#8b93a5",lineWidth:1,lineStyle:2,title:"Balance"})}
+    const seen=new Set(),pts=[];
+    for(const [t,b,e] of d.history||[]){const ts=Math.floor(Date.parse(t)/1000);if(!seen.has(ts)){seen.add(ts);pts.push({ts,b,e})}}
+    pts.sort((a,b)=>a.ts-b.ts);
+    acEqS.setData(pts.map(p=>({time:p.ts,value:p.e})));acBalS.setData(pts.map(p=>({time:p.ts,value:p.b})));acChart.timeScale().fitContent();
+  }catch(e){$("acUpd").textContent="Account data: "+e.message}
+}
+loadAccount();setInterval(loadAccount,5*60e3);
 buildCards();renderAlerts();if(S.key)start();else $("status").textContent="Enter your API key to start";
 </script>
 </body>

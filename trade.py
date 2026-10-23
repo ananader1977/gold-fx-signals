@@ -23,6 +23,7 @@ import alert  # reuse indicators, Telegram helper and market-hours check
 DEMO = "https://demo-api-capital.backend-capital.com/api/v1"
 LIVE = "https://api-capital.backend-capital.com/api/v1"
 STATE_FILE = "trade_state.json"
+EQUITY_FILE = "equity.json"
 
 DEFAULTS = {
     "enabled": False,               # master switch
@@ -173,6 +174,25 @@ def blocked_time(now, t):
     return None
 
 
+def snapshot(cap, label):
+    """Save balance, equity and open positions to equity.json for the dashboard's account card."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    acc, pos = cap.account(), cap.positions()
+    upl = sum(float(p["upl"] or 0) for p in pos)
+    eq = load_json(EQUITY_FILE, {})
+    eq.setdefault("start", {"time": "2026-10-22T10:58:00Z", "balance": 1002.81})
+    eq.setdefault("history", [[eq["start"]["time"], eq["start"]["balance"], eq["start"]["balance"]]])
+    eq.update({"mode": label, "currency": acc["currency"], "updated": now})
+    eq["latest"] = {"balance": round(acc["balance"], 2), "available": round(acc["available"], 2),
+                    "open_pl": round(upl, 2), "equity": round(acc["balance"] + upl, 2),
+                    "positions": [{k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit", "upl", "created")}
+                                  for p in pos]}
+    eq["history"].append([now, eq["latest"]["balance"], eq["latest"]["equity"]])
+    eq["history"] = eq["history"][-5000:]
+    json.dump(eq, open(EQUITY_FILE, "w"), indent=1)
+    print(f"Snapshot: balance {acc['balance']:.2f} equity {eq['latest']['equity']:.2f} {acc['currency']}")
+
+
 def report(cap, t):
     """Check every open position has a stop loss and take profit on the correct side. Never trades."""
     def note(msg, level="notice"):
@@ -237,6 +257,7 @@ def main():
     print(f"[{label}] {acc['name']} balance {acc['balance']:.2f} {acc['currency']} available {acc['available']:.2f}")
 
     if report_only:
+        snapshot(cap, label)
         report(cap, t)
         return
 
@@ -339,6 +360,7 @@ def main():
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
     json.dump(state, open(STATE_FILE, "w"), indent=2)
+    snapshot(cap, label)
 
 
 if __name__ == "__main__":

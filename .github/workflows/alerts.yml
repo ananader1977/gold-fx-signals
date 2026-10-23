@@ -61,6 +61,6 @@ jobs:
         run: |
           git config user.name "price-bot"
           git config user.email "price-bot@users.noreply.github.com"
-          for f in state.json trade_state.json; do if [ -f "$f" ]; then git add "$f"; fi; done
+          for f in state.json trade_state.json equity.json; do if [ -f "$f" ]; then git add "$f"; fi; done
           git diff --cached --quiet || (git commit -m "Update bot state" && git pull --rebase && git push)
 
