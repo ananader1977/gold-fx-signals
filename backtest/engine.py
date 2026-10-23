@@ -6,7 +6,8 @@ sys.path.insert(0, ".")
 import alert  # the bot's own indicator code
 
 WINDOW = 199            # bot fetches 200 bars and drops the forming one
-SPREAD = {"XAU/USD": 0.45, "EUR/USD": 0.00007, "GBP/USD": 0.00013}   # typical Capital.com spreads
+SPREAD = {"XAU/USD": 0.45, "EUR/USD": 0.00007, "GBP/USD": 0.00013, "USD/JPY": 0.009, "AUD/USD": 0.00007,
+          "USD/CAD": 0.00014, "USD/CHF": 0.00014, "NZD/USD": 0.00014, "EUR/JPY": 0.016, "GBP/JPY": 0.028}   # typical Capital.com spreads
 FUND_PER_NIGHT = 0.00022   # ~8%/yr overnight funding on notional (each side pays roughly this)
 
 
