@@ -12,6 +12,10 @@
     "GBP/USD": {
       "above": [],
       "below": []
+    },
+    "BTC/USD": {
+      "above": [],
+      "below": []
     }
   },
   "trading": {

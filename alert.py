@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 KEY = os.environ.get("TWELVEDATA_KEY", "")
 TG_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
-DP = {"XAU/USD": 2, "EUR/USD": 5, "XAG/USD": 3, "GBP/USD": 5}
+DP = {"XAU/USD": 2, "EUR/USD": 5, "XAG/USD": 3, "GBP/USD": 5, "BTC/USD": 2}
+CRYPTO = {"BTC/USD"}  # trade 24/7, so they are checked at weekends too
 CACHE = ".candle_cache.json"
 
 
@@ -117,18 +118,21 @@ def analyse(closes):
     return p, signal, score, r
 
 
-def market_closed(now):
+def market_closed(now, sym=None):
+    if sym in CRYPTO:
+        return False
     d, h = now.weekday(), now.hour  # Mon=0 .. Sun=6
     return d == 5 or (d == 6 and h < 21) or (d == 4 and h >= 21)
 
 
 def main():
     now = datetime.now(timezone.utc)
-    if market_closed(now):
+    cfg = json.load(open("config.json"))
+    open_syms = [s for s in cfg["symbols"] if not market_closed(now, s)]
+    if not open_syms:
         print("Market closed, skipping"); return
     if not KEY:
         sys.exit("TWELVEDATA_KEY secret missing")
-    cfg = json.load(open("config.json"))
     try:
         state = json.load(open("state.json"))
     except (FileNotFoundError, json.JSONDecodeError):
@@ -138,6 +142,8 @@ def main():
     errors = {}
 
     for sym, targets in cfg["symbols"].items():
+        if sym not in open_syms:
+            continue
         j = time_series(sym)
         if j.get("status") == "error" or not j.get("values"):
             msg = j.get("message", "no data")

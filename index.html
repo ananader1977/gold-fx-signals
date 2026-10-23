@@ -42,12 +42,12 @@ ul{list-style:none;padding:0;margin:8px 0 0}
     <b>Setup</b> <span class="mut">— stored only in this browser</span>
     <div class="row" style="margin-top:8px">
       <label>Twelve Data API key <input id="apiKey" type="password" style="width:220px" placeholder="free key"></label>
-      <label>Poll every (sec) <input id="poll" type="number" min="30" value="90"></label>
+      <label>Poll every (sec) <input id="poll" type="number" min="30" value="120"></label>
       <label>Account balance ($) <input id="balance" type="number" value="500"></label>
       <label>Risk per trade (%) <input id="riskPct" type="number" step="0.1" value="1"></label>
       <button id="saveBtn">Save & start</button>
     </div>
-    <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses 3 calls (use 90 s or more to stay inside the daily limit). Polling slows to 1/3 speed when the tab is in the background and pauses on weekends.</p>
+    <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses up to 4 calls (use 120 s or more to stay inside the daily limit). Polling slows to 1/3 speed when the tab is in the background; at weekends only Bitcoin updates.</p>
   </div>
 
   <div class="card" id="acct">
@@ -68,7 +68,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
   <div class="card">
     <b>Price-target alerts</b>
     <div class="row" style="margin-top:8px">
-      <select id="aSym"><option>XAU/USD</option><option>EUR/USD</option><option>GBP/USD</option></select>
+      <select id="aSym"><option>XAU/USD</option><option>EUR/USD</option><option>GBP/USD</option><option>BTC/USD</option></select>
       <select id="aDir"><option value="above">rises to / above</option><option value="below">falls to / below</option></select>
       <input id="aPrice" type="number" step="any" placeholder="price">
       <button id="addAlert">Add alert</button>
@@ -82,8 +82,8 @@ ul{list-style:none;padding:0;margin:8px 0 0}
 </main>
 
 <script>
-const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5},"GBP/USD":{name:"British Pound / US Dollar",dp:5}};
-const S = { err:{}, key:"", poll:90, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
+const SYMBOLS = {"XAU/USD":{name:"Gold",dp:2},"EUR/USD":{name:"Euro / US Dollar",dp:5},"GBP/USD":{name:"British Pound / US Dollar",dp:5},"BTC/USD":{name:"Bitcoin",dp:2,crypto:true}};
+const S = { err:{}, key:"", poll:120, balance:500, riskPct:1, alerts:[], candles:{}, price:{}, charts:{}, lastCandleFetch:0, timer:null };
 const $ = id => document.getElementById(id);
 const store = { get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}} };
 
@@ -134,11 +134,13 @@ async function fetchCandles(){
   log(`Candles refreshed (${ok}/${Object.keys(SYMBOLS).length})`);
 }
 async function fetchPrices(){
-  const j=await td("price",{symbol:Object.keys(SYMBOLS).join(",")});
-  for(const sym of Object.keys(SYMBOLS)){const v=j[sym]?.price??j.price;if(v!=null)S.price[sym]=+v}
+  const syms=openSymbols();if(!syms.length)return;
+  const j=await td("price",{symbol:syms.join(",")});
+  for(const sym of syms){const v=syms.length>1?j[sym]?.price:j.price;if(v!=null)S.price[sym]=+v}
   for(const sym of Object.keys(SYMBOLS)){const c=S.candles[sym];const p=S.price[sym];if(c&&c.length&&p){const last=c[c.length-1];last.close=p;last.high=Math.max(last.high,p);last.low=Math.min(last.low,p)}}
 }
-function marketClosed(){const d=new Date(),day=d.getUTCDay(),h=d.getUTCHours();return day===6||(day===0&&h<21)||(day===5&&h>=21)}
+function marketClosed(sym){if(sym&&SYMBOLS[sym]?.crypto)return false;const d=new Date(),day=d.getUTCDay(),h=d.getUTCHours();return day===6||(day===0&&h<21)||(day===5&&h>=21)}
+const openSymbols=()=>Object.keys(SYMBOLS).filter(s=>!marketClosed(s));
 
 // ---------- UI ----------
 function fmt(sym,v){return v==null||isNaN(v)?"—":v.toFixed(SYMBOLS[sym].dp)}
@@ -167,7 +169,7 @@ function render(){
     q("tbl").innerHTML=`<tr><td>EMA 20 / 50</td><td>${fmt(sym,a.e20)} / ${fmt(sym,a.e50)}</td></tr><tr><td>RSI 14</td><td>${a.r?.toFixed(1)}</td></tr><tr><td>Bollinger low / high</td><td>${fmt(sym,a.b?.lo)} / ${fmt(sym,a.b?.up)}</td></tr><tr><td>ATR 14 (avg hourly range)</td><td>${fmt(sym,a.A)}</td></tr>`;
     q("why").innerHTML=a.why.map(w=>`<li>• ${w}</li>`).join("");
     if(a.plan&&!traded){const riskUsd=S.balance*S.riskPct/100;const units=riskUsd/a.plan.stopDist;
-      q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="XAU/USD"?2:0)} ${sym==="XAU/USD"?"oz":sym.split("/")[0]}</td></tr></table><small>Size assumes 1 unit = 1 oz gold, 1 EUR or 1 GBP. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
+      q("plan").innerHTML=`<b>Example ${a.signal} setup</b><table><tr><td>Entry ≈</td><td>${fmt(sym,a.plan.entry)}</td></tr><tr><td>Stop loss (1.5×ATR)</td><td>${fmt(sym,a.plan.stop)}</td></tr><tr><td>Take profit (3×ATR, 2:1)</td><td>${fmt(sym,a.plan.target)}</td></tr><tr><td>Risk $${riskUsd.toFixed(2)} → size</td><td>${units.toFixed(sym==="XAU/USD"?2:sym==="BTC/USD"?4:0)} ${sym==="XAU/USD"?"oz":sym.split("/")[0]}</td></tr></table><small>Size assumes 1 unit = 1 oz gold, 1 EUR, 1 GBP or 1 BTC. Check the deal ticket on Capital.com and use the smaller size if it differs.</small>`}
     else q("plan").innerHTML="";
     try{const ch=S.charts[sym];ch.s.setData(c.map(x=>({...x})));const e=ema(c.map(x=>x.close),50);ch.e50.setData(c.map((x,i)=>({time:x.time,value:e[i]})).filter(x=>x.value!=null))}catch(e){log(`${sym} chart: ${e.message}`)}
   }
@@ -196,7 +198,7 @@ async function tick(force){
   if(!S.key){$("status").textContent="Enter your API key to start";return}
   if(!force&&document.hidden&&Date.now()-(S.lastTick||0)<S.poll*3000)return; // slower polling in background tabs
   S.lastTick=Date.now();
-  if(!force&&marketClosed()){$("status").textContent="Market closed (weekend) — paused";return}
+  if(!force&&!openSymbols().length){$("status").textContent="Market closed (weekend) — paused";return}
   try{
     if(force||!S.lastCandleFetch||Date.now()-S.lastCandleFetch>30*60e3)await fetchCandles();
     await fetchPrices();render();checkAlerts();checkSignalChanges();
@@ -220,7 +222,7 @@ function renderBot(){
   for(const sym of Object.keys(SYMBOLS)){
     const el=document.querySelector(`#c-${sym.replace("/","")} [data-k=bot]`);if(!el)continue;
     const b=S.bot?.items?.[sym];
-    if(!b){el.innerHTML="";continue}
+    if(!b){el.innerHTML=S.bot?`<div class="mut" style="margin:8px 0">Watch only — the bot doesn't trade ${sym}${sym==="BTC/USD"?" (failed the backtest, Oct 2026)":""}.</div>`:"";continue}
     const ok=(c,t)=>`<li>${c?"<span class='up'>✓</span>":"<span class='down'>✗</span>"} ${t}</li>`;
     const up=b.ema20>b.ema50,above=b.close>b.ema50,mh=b.macd_hist>0;
     const label=b.signal==="BUY"?"BUY":b.signal==="SELL"&&b.long_only?"NO BUY (bearish)":b.signal;
