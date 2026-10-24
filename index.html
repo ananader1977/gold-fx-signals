@@ -28,16 +28,47 @@ button.ghost{background:transparent;color:var(--txt);border-color:var(--line)}
 ul{list-style:none;padding:0;margin:8px 0 0}
 #log{max-height:160px;overflow:auto;font-size:12px}
 .warn{border-color:var(--wait)}
+#gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+#gate form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px}
+#gate input,#gate button{width:100%;font-size:16px;padding:12px}
+body.locked{overflow:hidden}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:10px}
 .kv{font-size:20px;font-weight:700}.up{color:var(--buy)}.down{color:var(--sell)}
 </style>
 </head>
 <body>
+<div id="gate">
+  <form id="lvForm" autocomplete="on">
+    <div style="font-size:34px">🔒</div>
+    <h2 style="margin:6px 0 2px">Gold Signals</h2>
+    <small class="mut">Sign in to continue</small>
+    <input id="lvUser" type="email" inputmode="email" placeholder="Username (email)" autocomplete="username" required>
+    <input id="lvPass" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <small id="gateMsg" class="mut"></small>
+  </form>
+</div>
 <header>
   <div><h1>Gold Signals</h1><small id="status">Not started</small></div>
   <div class="row"><button class="ghost" id="notifyBtn">Enable notifications</button><button id="refreshBtn">Refresh now</button></div>
 </header>
 <main>
+  <div class="card" id="live">
+    <div class="row" style="justify-content:space-between"><b>Live account 🔒</b><span class="badge SELL">LIVE</span></div>
+    <small id="lvMsg" class="mut"></small>
+    <div id="lvBody" style="display:none">
+      <div class="kpis">
+        <div><small>Balance</small><div class="kv" id="lvBal">—</div></div>
+        <div><small>Equity (incl. open trades)</small><div class="kv" id="lvEq">—</div></div>
+        <div><small>Available</small><div class="kv" id="lvAvail">—</div></div>
+        <div><small>Change since start</small><div class="kv" id="lvChg">—</div></div>
+      </div>
+      <div class="chart" id="lvChart" style="height:180px"></div>
+      <table id="lvPos"></table>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><small id="lvUpd" class="mut"></small><button class="ghost" id="lvOut" type="button">Sign out</button></div>
+    </div>
+  </div>
+
   <div class="card warn" id="setup">
     <b>Setup</b> <span class="mut">— stored only in this browser</span>
     <div class="row" style="margin-top:8px">
@@ -61,27 +92,6 @@ ul{list-style:none;padding:0;margin:8px 0 0}
     <div class="chart" id="acChart" style="height:200px"></div>
     <table id="acPos"></table>
     <small id="acUpd">Waiting for the bot's first update…</small>
-  </div>
-
-  <div class="card" id="live">
-    <div class="row" style="justify-content:space-between"><b>Live account 🔒</b><span class="badge SELL">LIVE</span></div>
-    <form id="lvForm" class="row" style="margin-top:8px" autocomplete="on">
-      <input id="lvUser" type="email" placeholder="Username" autocomplete="username" style="width:220px" required>
-      <input id="lvPass" type="password" placeholder="Password" autocomplete="current-password" style="width:180px" required>
-      <button type="submit">Sign in</button>
-    </form>
-    <small id="lvMsg" class="mut">Real-money account. The data is encrypted; sign in to view it.</small>
-    <div id="lvBody" style="display:none">
-      <div class="kpis">
-        <div><small>Balance</small><div class="kv" id="lvBal">—</div></div>
-        <div><small>Equity (incl. open trades)</small><div class="kv" id="lvEq">—</div></div>
-        <div><small>Available</small><div class="kv" id="lvAvail">—</div></div>
-        <div><small>Change since start</small><div class="kv" id="lvChg">—</div></div>
-      </div>
-      <div class="chart" id="lvChart" style="height:180px"></div>
-      <table id="lvPos"></table>
-      <div class="row" style="justify-content:space-between;margin-top:6px"><small id="lvUpd" class="mut"></small><button class="ghost" id="lvOut" type="button">Sign out</button></div>
-    </div>
   </div>
 
   <div class="grid" id="cards"></div>
@@ -295,18 +305,18 @@ async function deriveLiveKey(user,pwd,salt,iter){
 async function fetchLive(){const r=await fetch("live.enc.json?ts="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error("No live data yet — the bot creates it on its next live run.");return r.json()}
 async function decryptLive(f,raw){const k=await crypto.subtle.importKey("raw",raw,"AES-GCM",false,["decrypt"]);
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(f.iv)},k,b64d(f.ct))))}
-async function liveLogin(e){e.preventDefault();$("lvMsg").textContent="Checking…";
+async function liveLogin(e){e.preventDefault();$("gateMsg").textContent="Checking…";
   try{const f=await fetchLive();const raw=await deriveLiveKey($("lvUser").value,$("lvPass").value,b64d(f.salt),f.iter);const d=await decryptLive(f,raw);
     liveKey=raw;liveSalt=f.salt;try{sessionStorage.setItem("lvk",JSON.stringify({k:b64e(raw),s:f.salt}))}catch(_){}
     $("lvPass").value="";renderLive(d)}
-  catch(err){$("lvMsg").textContent=err.name==="OperationError"?"Wrong username or password.":err.message}}
+  catch(err){$("gateMsg").textContent=err.name==="OperationError"?"Wrong username or password.":err.message}}
 async function refreshLive(){if(!liveKey)return;
   try{const f=await fetchLive();if(f.salt!==liveSalt){liveLogout("The login was changed — please sign in again.");return}renderLive(await decryptLive(f,liveKey))}
   catch(e){$("lvMsg").textContent=e.message}}
 function liveLogout(msg){liveKey=null;liveSalt=null;try{sessionStorage.removeItem("lvk")}catch(_){}
-  $("lvBody").style.display="none";$("lvForm").style.display="";$("lvMsg").textContent=msg||"Signed out."}
+  $("lvBody").style.display="none";$("gate").style.display="";document.body.classList.add("locked");$("gateMsg").textContent=msg||"Signed out."}
 function renderLive(d){
-  $("lvForm").style.display="none";$("lvBody").style.display="";$("lvMsg").textContent="";
+  $("gate").style.display="none";document.body.classList.remove("locked");$("lvBody").style.display="";$("lvMsg").textContent="";
   const L=d.latest||{},c=d.currency||"",s=d.start?.balance,chg=L.equity!=null&&s?L.equity-s:null;
   $("lvBal").textContent=money(L.balance,c);$("lvEq").textContent=money(L.equity,c);$("lvAvail").textContent=money(L.available,c);
   $("lvChg").innerHTML=chg==null?"—":`<span class="${chg>=0?"up":"down"}">${chg>=0?"+":""}${money(chg,c)} (${(chg/s*100).toFixed(2)}%)</span>`;
@@ -319,6 +329,7 @@ function renderLive(d){
   const seen=new Set(),pts=[];for(const [t,b,e] of d.history||[]){const ts=Math.floor(Date.parse(t)/1000);if(!seen.has(ts)){seen.add(ts);pts.push({ts,b,e})}}
   pts.sort((a,b)=>a.ts-b.ts);lvEqS.setData(pts.map(p=>({time:p.ts,value:p.e})));lvBalS.setData(pts.map(p=>({time:p.ts,value:p.b})));lvChart.timeScale().fitContent()}
 $("lvForm").addEventListener("submit",liveLogin);$("lvOut").onclick=()=>liveLogout();
+document.body.classList.add("locked");
 try{const s=JSON.parse(sessionStorage.getItem("lvk")||"null");if(s){liveKey=b64d(s.k).buffer;liveSalt=s.s;refreshLive()}}catch(_){}
 setInterval(refreshLive,5*60e3);
 
