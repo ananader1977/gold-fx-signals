@@ -13,6 +13,10 @@ on:
         description: "Report open positions (stop loss / take profit check)"
         type: boolean
         default: false
+      live_check:
+        description: "Live account connection check (no trades)"
+        type: boolean
+        default: false
       telegram_test:
         description: "Send a Telegram test message"
         type: boolean
@@ -56,6 +60,25 @@ jobs:
       - name: Trading
         if: github.event_name == 'schedule' || !inputs.check_only
         run: python trade.py
+      - name: Restore live state (private cache, not committed)
+        if: github.event_name == 'schedule' || !inputs.check_only
+        uses: actions/cache/restore@v4
+        with:
+          path: live_state.json
+          key: live-state-${{ github.run_id }}
+          restore-keys: live-state-
+      - name: Live trading
+        if: github.event_name == 'schedule' || !inputs.check_only
+        run: python trade.py --live
+      - name: Save live state
+        if: (github.event_name == 'schedule' || !inputs.check_only) && hashFiles('live_state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: live_state.json
+          key: live-state-${{ github.run_id }}
+      - name: Live connection check
+        if: github.event_name == 'workflow_dispatch' && inputs.live_check
+        run: python trade.py --live --check
       - name: Save state
         if: always()
         run: |

@@ -28,5 +28,14 @@
     "timeframe": "4h",
     "signal": "trend",
     "long_only": true
+  },
+  "live": {
+    "enabled": true,
+    "risk_pct": 1.0,
+    "max_size": {
+      "XAU/USD": 0.01
+    },
+    "min_size_max_risk_pct": 3.0,
+    "min_balance": 70
   }
 }

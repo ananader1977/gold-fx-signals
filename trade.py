@@ -286,9 +286,20 @@ def report(cap, t):
 def main():
     check_only = "--check" in sys.argv
     report_only = "--report" in sys.argv
+    live_run = "--live" in sys.argv   # second, separate run on the LIVE account (config.json -> "live" overrides)
     now = datetime.now(timezone.utc)
     cfg = load_json("config.json", {})
     t = {**DEFAULTS, **cfg.get("trading", {})}
+    state_file = STATE_FILE
+    if live_run:
+        t = {**t, **cfg.get("live", {}), "mode": "live"}
+        state_file = "live_state.json"   # kept in a private Actions cache, never committed (repo is public)
+        if not t["enabled"]:
+            print("Live trading disabled in config.json (live.enabled=false)."); return
+        if os.environ.get("CAPITAL_LIVE_CONFIRM") != "YES":
+            print("Live trading enabled in config but secret CAPITAL_LIVE_CONFIRM is not YES. Not trading live."); return
+        if report_only:
+            print("Position report is demo-only (public logs)."); return
     live = t["mode"] == "live"
     if live and os.environ.get("CAPITAL_LIVE_CONFIRM") != "YES":
         sys.exit("Live mode requested but secret CAPITAL_LIVE_CONFIRM is not YES. Refusing to trade.")
@@ -305,7 +316,10 @@ def main():
     cap = Capital(LIVE if live else DEMO, os.environ["CAPITAL_API_KEY"])
     cap.login(os.environ["CAPITAL_IDENTIFIER"], os.environ["CAPITAL_PASSWORD"])
     acc = cap.account()
-    print(f"[{label}] {acc['name']} balance {acc['balance']:.2f} {acc['currency']} available {acc['available']:.2f}")
+    if live_run:   # public run logs: never print live money amounts
+        print(f"[{label}] logged in, account currency {acc['currency']}")
+    else:
+        print(f"[{label}] {acc['name']} balance {acc['balance']:.2f} {acc['currency']} available {acc['available']:.2f}")
 
     if report_only:
         snapshot(cap, label)
@@ -317,7 +331,7 @@ def main():
         for sym, epic in t["epics"].items():
             try:
                 m = cap.market(epic)
-                msg = (f"{sym} -> epic {epic}: {m['name']} bid {m['bid']} offer {m['offer']} "
+                msg = (f"[{label}] {sym} -> epic {epic}: {m['name']} bid {m['bid']} offer {m['offer']} "
                        f"status {m['status']} min size {m['min_size']} step {m['step']}")
                 print("  " + msg)
                 print("::notice::" + msg)
@@ -326,19 +340,25 @@ def main():
                 need = m["min_size"] * t["stop_atr"] * a * (3.6725 if acc["currency"] == "AED" else 1)
                 fn = trend_signal if t["signal"] == "trend" else alert.analyse
                 _, sig, score, _ = fn([x["close"] for x in c])
-                print(f"::notice::{sym} {t['timeframe']} signal {sig} (score {score:+d}), ATR {a:.5f}; "
-                      f"min size risks {need:.2f} {acc['currency']} = {100 * need / acc['balance']:.2f}% of balance "
-                      f"(risk setting {t['risk_pct']}%)")
+                pct = 100 * need / max(acc['balance'], 0.01)
+                amt = "" if live_run else f"{need:.2f} {acc['currency']} = "
+                print(f"::notice::[{label}] {sym} {t['timeframe']} signal {sig} (score {score:+d}), ATR {a:.5f}; "
+                      f"min size risks {amt}{pct:.2f}% of balance (risk setting {t['risk_pct']}%, "
+                      f"min-size allowed up to {t.get('min_size_max_risk_pct', 0)}%) -> "
+                      f"{'OK, will trade min size' if t['risk_pct'] >= pct or t.get('min_size_max_risk_pct', 0) >= pct else 'TOO SMALL: would skip trades'}")
             except RuntimeError as e:
                 print(f"  {sym} -> epic {epic} NOT FOUND ({e}). Candidates:",
                       cap.search({"XAU/USD": "gold", "XAG/USD": "silver"}.get(sym, sym.replace("/", ""))))
                 missing.append(sym)
-        print("  open positions:", cap.positions() or "none")
+        if not live_run:
+            print("  open positions:", cap.positions() or "none")
+        else:
+            print(f"::notice::[{label}] open positions: {len(cap.positions())}")
         if missing:
             sys.exit(f"Market name not found for: {', '.join(missing)} (see candidates above)")
         return
 
-    state = load_json(STATE_FILE, {})
+    state = load_json(state_file, {})
     today = now.strftime("%Y-%m-%d")
     if state.get("day") != today:
         state.update({"day": today, "start_balance": acc["balance"], "trades_today": 0})
@@ -352,6 +372,12 @@ def main():
         halt = "max trades per day reached"
     elif blocked_time(now, t):
         halt = blocked_time(now, t)
+    if t.get("min_balance") and acc["balance"] < t["min_balance"]:
+        halt = f"balance below the {t['min_balance']} {acc['currency']} floor"
+        if state.get("floor_alerted") != today:
+            state["floor_alerted"] = today
+            alert.telegram(f"[{label}] Balance {acc['balance']:.2f} {acc['currency']} is below the floor of "
+                           f"{t['min_balance']}. No new trades until you raise the balance or change config.json.")
 
     positions = cap.positions()
     bot_signals = {}
@@ -378,7 +404,7 @@ def main():
 
         # Telegram when the bot's own signal changes (replaces the old 1h score alerts)
         prev = state.setdefault("bot_signal", {}).get(sym)
-        if prev is not None and prev != signal:
+        if prev is not None and prev != signal and not live_run:   # demo run already announces it
             what = {"BUY": "all 3 trend rules agree. The bot buys if it has no gold position.",
                     "SELL": ("bearish. The bot closes any gold long and does not buy." if t["long_only"]
                              else "bearish. The bot may sell."),
@@ -437,6 +463,11 @@ def main():
         risk_cash = risk_usd
         size = min(risk_cash / stop_dist, t["max_size"].get(sym, 1))
         size = round_step(size, m["step"])
+        # tiny accounts: allow the broker's minimum size if its risk stays within min_size_max_risk_pct
+        bal_usd = acc["balance"] / 3.6725 if acc["currency"] == "AED" else acc["balance"]
+        if size < m["min_size"] and m["min_size"] * stop_dist <= bal_usd * t.get("min_size_max_risk_pct", 0) / 100:
+            size = m["min_size"]
+            print(f"  using broker minimum size {size} (risk {100 * size * stop_dist / bal_usd:.1f}% of balance)")
         if size < m["min_size"]:
             info["action"] = f"entry blocked: size below broker minimum at {t['risk_pct']}% risk"
             print(f"  skip entry: size {size} below broker minimum {m['min_size']} at {t['risk_pct']}% risk"); continue
@@ -454,8 +485,9 @@ def main():
                        + ("" if ok else f"\nReason: {conf.get('reason') or conf.get('status')}"))
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
-    json.dump(state, open(STATE_FILE, "w"), indent=2)
-    snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
+    json.dump(state, open(state_file, "w"), indent=2)
+    if not live_run:   # the public dashboard shows the demo account only
+        snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
 
 
 if __name__ == "__main__":
