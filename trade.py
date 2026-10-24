@@ -295,13 +295,15 @@ def main():
         t = {**t, **cfg.get("live", {}), "mode": "live"}
         state_file = "live_state.json"   # kept in a private Actions cache, never committed (repo is public)
         if not t["enabled"]:
-            print("Live trading disabled in config.json (live.enabled=false)."); return
-        if os.environ.get("CAPITAL_LIVE_CONFIRM") != "YES":
-            print("Live trading enabled in config but secret CAPITAL_LIVE_CONFIRM is not YES. Not trading live."); return
+            print("::warning::Live trading disabled in config.json (live.enabled=false)."); return
+        conf_val = os.environ.get("CAPITAL_LIVE_CONFIRM", "")
+        if conf_val.strip().upper() != "YES":
+            print(f"::warning::Live locked: secret CAPITAL_LIVE_CONFIRM is "
+                  f"{'missing or empty' if not conf_val else f'set but not YES ({len(conf_val)} characters)'}."); return
         if report_only:
             print("Position report is demo-only (public logs)."); return
     live = t["mode"] == "live"
-    if live and os.environ.get("CAPITAL_LIVE_CONFIRM") != "YES":
+    if live and os.environ.get("CAPITAL_LIVE_CONFIRM", "").strip().upper() != "YES":
         sys.exit("Live mode requested but secret CAPITAL_LIVE_CONFIRM is not YES. Refusing to trade.")
     label = "LIVE" if live else "DEMO"
 
