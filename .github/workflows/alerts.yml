@@ -40,11 +40,14 @@ jobs:
       CAPITAL_IDENTIFIER: ${{ secrets.CAPITAL_IDENTIFIER }}
       CAPITAL_PASSWORD: ${{ secrets.CAPITAL_PASSWORD }}
       CAPITAL_LIVE_CONFIRM: ${{ secrets.CAPITAL_LIVE_CONFIRM }}
+      LIVE_DASH_USER: ${{ secrets.LIVE_DASH_USER }}
+      LIVE_DASH_PASSWORD: ${{ secrets.LIVE_DASH_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: pip install -q cryptography
       - name: Telegram test
         if: github.event_name == 'workflow_dispatch' && inputs.telegram_test
         run: python -c "import alert; alert.telegram('Test message from your gold-fx-signals bot. Telegram alerts are working.', strict=True)"
@@ -84,6 +87,6 @@ jobs:
         run: |
           git config user.name "price-bot"
           git config user.email "price-bot@users.noreply.github.com"
-          for f in state.json trade_state.json equity.json; do if [ -f "$f" ]; then git add "$f"; fi; done
+          for f in state.json trade_state.json equity.json live.enc.json; do if [ -f "$f" ]; then git add "$f"; fi; done
           git diff --cached --quiet || (git commit -m "Update bot state" && git pull --rebase && git push)
 

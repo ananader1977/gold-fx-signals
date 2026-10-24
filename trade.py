@@ -244,6 +244,61 @@ def snapshot(cap, label, signals=None):
     print(f"Snapshot: balance {acc['balance']:.2f} equity {eq['latest']['equity']:.2f} {acc['currency']}")
 
 
+LIVE_ENC_FILE = "live.enc.json"
+PBKDF2_ITER = 600_000
+
+
+def _live_key(salt):
+    """Key from the dashboard username + password (GitHub secrets). Same derivation as the dashboard's login."""
+    import hashlib
+    user = os.environ.get("LIVE_DASH_USER", "").strip().lower()
+    pwd = os.environ.get("LIVE_DASH_PASSWORD", "")
+    if not user or not pwd:
+        return None
+    return hashlib.pbkdf2_hmac("sha256", f"{user}\n{pwd}".encode(), salt, PBKDF2_ITER, 32)
+
+
+def live_snapshot(cap, label):
+    """Encrypted live-account snapshot for the dashboard's login-protected card (repo is public:
+    only ciphertext is committed; it can be read only with the dashboard username + password)."""
+    import base64, secrets
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    if not os.environ.get("LIVE_DASH_USER") or not os.environ.get("LIVE_DASH_PASSWORD"):
+        print("::warning::Live dashboard not updated: secrets LIVE_DASH_USER / LIVE_DASH_PASSWORD not set"); return
+    b64, unb64 = (lambda b: base64.b64encode(b).decode()), base64.b64decode
+    old, data = load_json(LIVE_ENC_FILE, {}), {}
+    salt = unb64(old["salt"]) if old.get("salt") else secrets.token_bytes(16)
+    key = _live_key(salt)
+    if old.get("ct"):
+        try:
+            data = json.loads(AESGCM(key).decrypt(unb64(old["iv"]), unb64(old["ct"]), None))
+        except Exception:
+            print("::warning::Old live dashboard data could not be decrypted (login changed?) - starting fresh")
+            salt = secrets.token_bytes(16); key = _live_key(salt); data = {}
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    acc, pos = cap.account(), cap.positions()
+    upl = sum(float(p["upl"] or 0) for p in pos)
+    data.setdefault("start", {"time": now, "balance": round(acc["balance"], 2)})
+    data.setdefault("history", [])
+    last_bal = data["history"][-1][1] if data["history"] else None
+    if last_bal and abs(acc["balance"] - last_bal) > 0.10 * last_bal:   # deposit / withdrawal -> new phase
+        data.setdefault("phases", []).append({"start": data["start"], "end": {"time": now, "balance": last_bal,
+                                              "equity": data["history"][-1][2]}})
+        data["start"], data["history"] = {"time": now, "balance": round(acc["balance"], 2)}, []
+    data.update({"mode": label, "currency": acc["currency"], "updated": now,
+                 "latest": {"balance": round(acc["balance"], 2), "available": round(acc["available"], 2),
+                            "open_pl": round(upl, 2), "equity": round(acc["balance"] + upl, 2),
+                            "positions": [{k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit", "upl", "created")}
+                                          for p in pos]}})
+    data["history"].append([now, data["latest"]["balance"], data["latest"]["equity"]])
+    data["history"] = data["history"][-5000:]
+    iv = secrets.token_bytes(12)
+    ct = AESGCM(key).encrypt(iv, json.dumps(data, separators=(",", ":")).encode(), None)
+    json.dump({"v": 1, "kdf": "PBKDF2-SHA256", "iter": PBKDF2_ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)},
+              open(LIVE_ENC_FILE, "w"))
+    print("Live dashboard data updated (encrypted)")
+
+
 def report(cap, t):
     """Check every open position has a stop loss and take profit on the correct side. Never trades."""
     def note(msg, level="notice"):
@@ -356,6 +411,7 @@ def main():
             print("  open positions:", cap.positions() or "none")
         else:
             print(f"::notice::[{label}] open positions: {len(cap.positions())}")
+            live_snapshot(cap, label)
         if missing:
             sys.exit(f"Market name not found for: {', '.join(missing)} (see candidates above)")
         return
@@ -488,8 +544,10 @@ def main():
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
     json.dump(state, open(state_file, "w"), indent=2)
-    if not live_run:   # the public dashboard shows the demo account only
+    if not live_run:   # the public dashboard card shows the demo account
         snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
+    else:              # live account: encrypted, shown only after login
+        live_snapshot(cap, label)
 
 
 if __name__ == "__main__":
