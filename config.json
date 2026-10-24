@@ -11,7 +11,7 @@
     "mode": "demo",
     "risk_pct": 1.0,
     "max_size": {
-      "XAU/USD": 1
+      "XAU/USD": 5
     },
     "epics": {
       "XAU/USD": "GOLD"

@@ -56,7 +56,7 @@ ul{list-style:none;padding:0;margin:8px 0 0}
       <div><small>Balance</small><div class="kv" id="acBal">—</div></div>
       <div><small>Equity (incl. open trades)</small><div class="kv" id="acEq">—</div></div>
       <div><small>Available</small><div class="kv" id="acAvail">—</div></div>
-      <div><small>Change since start</small><div class="kv" id="acChg">—</div></div>
+      <div><small>Change since test start</small><div class="kv" id="acChg">—</div></div>
     </div>
     <div class="chart" id="acChart" style="height:200px"></div>
     <table id="acPos"></table>
@@ -253,7 +253,8 @@ async function loadAccount(){
     $("acChg").innerHTML=chg==null?"—":`<span class="${chg>=0?"up":"down"}">${chg>=0?"+":""}${money(chg,c)} (${(chg/s*100).toFixed(2)}%)</span>`;
     const pos=L.positions||[];
     $("acPos").innerHTML=pos.length?`<tr><td><b>Open trade</b></td><td><b>Entry → Stop / Target</b></td><td><b>P/L</b></td></tr>`+pos.map(p=>`<tr><td>${p.epic} ${p.direction} ${p.size}</td><td>${p.level} → ${p.stop??"<b class='down'>NO STOP</b>"} / ${p.profit??"<b class='down'>NO TARGET</b>"}</td><td class="${p.upl>=0?"up":"down"}">${p.upl>=0?"+":""}${Number(p.upl).toFixed(2)}</td></tr>`).join(""):`<tr><td class="mut">No open trades</td><td></td></tr>`;
-    $("acUpd").textContent=`Updated ${new Date(d.updated).toLocaleString()} · start ${money(s,c)} on ${new Date(d.start.time).toLocaleDateString()} · refreshed by the bot about hourly`;
+    const ph=(d.phases||[]).map((p,i)=>{const r=p.end.equity-p.start.balance;return `phase ${i+1}: ${money(p.start.balance,c)} → ${money(p.end.equity,c)} (${r>=0?"+":""}${(r/p.start.balance*100).toFixed(1)}%)`}).join(" · ");
+    $("acUpd").textContent=`Updated ${new Date(d.updated).toLocaleString()} · test started ${new Date(d.start.time).toLocaleDateString()} with ${money(s,c)} · refreshed by the bot about hourly`+(ph?` · earlier ${ph}`:"");
     if(!acChart){acChart=LightweightCharts.createChart($("acChart"),{layout:{background:{color:"transparent"},textColor:"#8b93a5"},grid:{vertLines:{color:"#20242d"},horzLines:{color:"#20242d"}},timeScale:{timeVisible:true},autoSize:true});
       acEqS=acChart.addLineSeries({color:"#4c8dff",lineWidth:2,title:"Equity"});acBalS=acChart.addLineSeries({color:"#8b93a5",lineWidth:1,lineStyle:2,title:"Balance"})}
     const seen=new Set(),pts=[];

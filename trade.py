@@ -32,7 +32,7 @@ DEFAULTS = {
     "enabled": False,               # master switch
     "mode": "demo",                 # "demo" or "live"
     "risk_pct": 1.0,                # % of balance risked per trade (distance to stop)
-    "max_size": {"XAU/USD": 1},     # hard cap per order
+    "max_size": {"XAU/USD": 5},     # hard cap per order (oz)
     "epics": {"XAU/USD": "GOLD"},   # gold only (other instruments failed the backtest)
     "stop_atr": 1.5,
     "target_atr": 3.0,
@@ -227,6 +227,17 @@ def snapshot(cap, label, signals=None):
                                   for p in pos]}
     if signals is not None:
         eq["signals"] = signals   # the bot's own view per instrument, shown on the dashboard
+    # Deposit / withdrawal detection: with 1% risk and one position, trading can't move the balance 10%
+    # between two runs. A bigger jump is a top-up or withdrawal -> start a new test phase instead of
+    # counting it as profit or loss.
+    last_bal = eq["history"][-1][1] if eq["history"] else None
+    if last_bal and abs(acc["balance"] - last_bal) > 0.10 * last_bal:
+        eq.setdefault("phases", []).append({"start": eq["start"], "end": {"time": now, "balance": last_bal,
+                                            "equity": eq["history"][-1][2]}})
+        eq["start"] = {"time": now, "balance": round(acc["balance"], 2)}
+        eq["history"] = []
+        alert.telegram(f"[{label}] Balance changed {last_bal:,.2f} → {acc['balance']:,.2f} {acc['currency']} "
+                       f"(deposit/withdrawal). New test phase started; 'change since start' now measures from here.")
     eq["history"].append([now, eq["latest"]["balance"], eq["latest"]["equity"]])
     eq["history"] = eq["history"][-5000:]
     json.dump(eq, open(EQUITY_FILE, "w"), indent=1)
