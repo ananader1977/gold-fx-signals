@@ -36,7 +36,8 @@ jobs:
         run: |
           set -o pipefail
           gradle assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log || {
-            echo "::error title=Gradle build failed::$(grep -E 'error:|FAILURE|What went wrong|Could not|> ' build.log | head -25 | tr '\n' '|' )"
+            echo "::error title=Gradle build failed::$(grep -E 'error:|What went wrong|Could not|Caused by|Exception|^> ' build.log | grep -v 'Run with' | head -30 | tr '\n' '|' )"
+            echo "::error title=Env::ANDROID_HOME=$ANDROID_HOME ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
             exit 1; }
       - name: Save signing key
         if: steps.key.outputs.cache-hit != 'true'
