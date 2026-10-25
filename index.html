@@ -44,6 +44,9 @@ body.locked{overflow:hidden}
     <small class="mut">Sign in to continue</small>
     <input id="lvUser" type="email" inputmode="email" placeholder="Username (email)" autocomplete="username" required>
     <input id="lvPass" type="password" placeholder="Password" autocomplete="current-password" required>
+    <label style="display:flex;align-items:center;gap:8px;justify-content:flex-start;color:var(--mut);font-size:14px">
+      <input id="lvRemember" type="checkbox" style="width:auto;margin:0"> Remember me on this device
+    </label>
     <button type="submit">Sign in</button>
     <small id="gateMsg" class="mut"></small>
   </form>
@@ -307,13 +310,17 @@ async function decryptLive(f,raw){const k=await crypto.subtle.importKey("raw",ra
   return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(f.iv)},k,b64d(f.ct))))}
 async function liveLogin(e){e.preventDefault();$("gateMsg").textContent="Checking…";
   try{const f=await fetchLive();const raw=await deriveLiveKey($("lvUser").value,$("lvPass").value,b64d(f.salt),f.iter);const d=await decryptLive(f,raw);
-    liveKey=raw;liveSalt=f.salt;try{sessionStorage.setItem("lvk",JSON.stringify({k:b64e(raw),s:f.salt}))}catch(_){}
+    liveKey=raw;liveSalt=f.salt;
+    // Remember me: keep the derived unlock key (never the password itself) on this device until Sign out
+    const rec=JSON.stringify({k:b64e(raw),s:f.salt}),rem=$("lvRemember").checked;
+    try{(rem?localStorage:sessionStorage).setItem("lvk",rec);(rem?sessionStorage:localStorage).removeItem("lvk");
+        localStorage.setItem("lvRem",rem?"1":"0");if(rem)localStorage.setItem("lvUser",$("lvUser").value.trim());else localStorage.removeItem("lvUser")}catch(_){}
     $("lvPass").value="";renderLive(d)}
   catch(err){$("gateMsg").textContent=err.name==="OperationError"?"Wrong username or password.":err.message}}
 async function refreshLive(){if(!liveKey)return;
   try{const f=await fetchLive();if(f.salt!==liveSalt){liveLogout("The login was changed — please sign in again.");return}renderLive(await decryptLive(f,liveKey))}
   catch(e){$("lvMsg").textContent=e.message}}
-function liveLogout(msg){liveKey=null;liveSalt=null;try{sessionStorage.removeItem("lvk")}catch(_){}
+function liveLogout(msg){liveKey=null;liveSalt=null;try{sessionStorage.removeItem("lvk");localStorage.removeItem("lvk")}catch(_){}
   $("lvBody").style.display="none";$("gate").style.display="";document.body.classList.add("locked");$("gateMsg").textContent=msg||"Signed out."}
 function renderLive(d){
   $("gate").style.display="none";document.body.classList.remove("locked");$("lvBody").style.display="";$("lvMsg").textContent="";
@@ -330,7 +337,8 @@ function renderLive(d){
   pts.sort((a,b)=>a.ts-b.ts);lvEqS.setData(pts.map(p=>({time:p.ts,value:p.e})));lvBalS.setData(pts.map(p=>({time:p.ts,value:p.b})));lvChart.timeScale().fitContent()}
 $("lvForm").addEventListener("submit",liveLogin);$("lvOut").onclick=()=>liveLogout();
 document.body.classList.add("locked");
-try{const s=JSON.parse(sessionStorage.getItem("lvk")||"null");if(s){liveKey=b64d(s.k).buffer;liveSalt=s.s;refreshLive()}}catch(_){}
+try{$("lvRemember").checked=localStorage.getItem("lvRem")==="1";const u=localStorage.getItem("lvUser");if(u)$("lvUser").value=u}catch(_){}
+try{const s=JSON.parse(localStorage.getItem("lvk")||sessionStorage.getItem("lvk")||"null");if(s){liveKey=b64d(s.k).buffer;liveSalt=s.s;refreshLive()}}catch(_){}
 setInterval(refreshLive,5*60e3);
 
 renderAlerts();if(S.key)start();else $("status").textContent="Enter your API key to start";
