@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive icon: gold bar with a rising line -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- gold ingot (trapezoid) -->
+    <path android:fillColor="#E0B341"
+        android:pathData="M30,66 L40,46 L68,46 L78,66 Z" />
+    <path android:fillColor="#F4D06F"
+        android:pathData="M40,46 L68,46 L64,52 L44,52 Z" />
+    <!-- rising line -->
+    <path android:strokeColor="#1FBF75" android:strokeWidth="4"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M32,40 L44,32 L52,36 L68,24" />
+    <path android:fillColor="#1FBF75"
+        android:pathData="M64,20 L74,22 L70,31 Z" />
+</vector>
