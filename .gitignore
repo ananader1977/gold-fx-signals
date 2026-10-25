@@ -1,3 +1,7 @@
 .candle_cache.json
 __pycache__/
 live_state.json
+android/keystore/
+android/.gradle/
+android/build/
+android/app/build/

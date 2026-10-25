@@ -29,8 +29,14 @@ jobs:
         id: key
         uses: actions/cache/restore@v4
         with:
-          path: ~/.android/debug.keystore
-          key: gold-signals-signing-key
+          path: android/keystore/gold.jks
+          key: gold-signals-key-v1
+      - name: Create signing key (first build only)
+        if: steps.key.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p android/keystore
+          keytool -genkeypair -noprompt -keystore android/keystore/gold.jks -storepass goldsignals -keypass goldsignals \
+            -alias gold -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Gold Signals, O=Anas, C=AE"
       - name: Build APK
         working-directory: android
         run: |
@@ -43,14 +49,15 @@ jobs:
         if: steps.key.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ~/.android/debug.keystore
-          key: gold-signals-signing-key
+          path: android/keystore/gold.jks
+          key: gold-signals-key-v1
       - name: Publish to the "Android app" release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp android/app/build/outputs/apk/debug/app-debug.apk GoldSignals.apk
           ls -l GoldSignals.apk
+          echo "::notice::Signed with: $(keytool -printcert -jarfile GoldSignals.apk | grep -m1 'Owner')"
           gh release view android-app >/dev/null 2>&1 || \
             gh release create android-app --title "Gold Signals – Android app" \
               --notes "Install GoldSignals.apk on your Android phone. Direct link: https://github.com/${{ github.repository }}/releases/download/android-app/GoldSignals.apk"

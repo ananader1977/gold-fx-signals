@@ -15,9 +15,24 @@ android {
         versionName = "1.0." + runNumber
     }
 
+    // Fixed signing key (created once by the workflow, kept in a private Actions cache, never committed)
+    // so every new APK installs as an update over the previous one.
+    def ks = rootProject.file("keystore/gold.jks")
+    signingConfigs {
+        gold {
+            if (ks.exists()) {
+                storeFile ks
+                storePassword "goldsignals"
+                keyAlias "gold"
+                keyPassword "goldsignals"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             minifyEnabled false
+            if (ks.exists()) signingConfig signingConfigs.gold
         }
     }
 
