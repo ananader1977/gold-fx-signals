@@ -10,8 +10,9 @@ android {
         applicationId 'com.anas.goldsignals'
         minSdk 26
         targetSdk 35
-        versionCode (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
-        versionName "1.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "1")
+        def runNumber = System.getenv("GITHUB_RUN_NUMBER") ?: "1"
+        versionCode = Integer.parseInt(runNumber)
+        versionName = "1.0." + runNumber
     }
 
     buildTypes {
