@@ -58,31 +58,25 @@
    "2026-10-26T02:17:46Z",
    50049.41,
    50057.59
+  ],
+  [
+   "2026-10-26T02:31:38Z",
+   50050.61,
+   50050.61
   ]
  ],
  "mode": "DEMO",
  "currency": "AED",
- "updated": "2026-10-26T02:17:46Z",
+ "updated": "2026-10-26T02:31:38Z",
  "latest": {
-  "balance": 50049.41,
-  "available": 50042.08,
-  "open_pl": 8.18,
-  "equity": 50057.59,
-  "positions": [
-   {
-    "epic": "GOLD",
-    "direction": "SELL",
-    "size": 0.1,
-    "level": 4017.29,
-    "stop": 4043.0,
-    "profit": 3965.54,
-    "upl": 8.18,
-    "created": "2026-10-23T03:27:56.054"
-   }
-  ]
+  "balance": 50050.61,
+  "available": 50050.61,
+  "open_pl": 0,
+  "equity": 50050.61,
+  "positions": []
  },
  "signals": {
-  "updated": "2026-10-26T01:56:01Z",
+  "updated": "2026-10-26T02:31:37Z",
   "items": {
    "XAU/USD": {
     "signal": "WAIT",
@@ -99,7 +93,7 @@
     "stop_atr": 2.0,
     "target_atr": 4.0,
     "risk_pct": 1.0,
-    "action": "holding SELL position"
+    "action": "waiting: trend rules not all agreeing"
    }
   }
  },
