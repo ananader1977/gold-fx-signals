@@ -384,6 +384,14 @@ def main():
         return
 
     if check_only:
+        # account ID(s) go to Telegram only (run logs are public)
+        try:
+            j, _ = cap.req("GET", "/accounts")
+            lines = [f"• {a.get('accountName')} — ID {a.get('accountId')} ({a.get('currency')}, {a.get('accountType', '')})"
+                     + (" ← used by the bot" if a.get("preferred") else "") for a in j.get("accounts", [])]
+            alert.telegram(f"[{label}] Capital.com account(s):\n" + "\n".join(lines))
+        except RuntimeError as e:
+            print("  could not list accounts:", e)
         missing = []
         for sym, epic in t["epics"].items():
             try:
