@@ -439,6 +439,32 @@ def main():
 
     positions = cap.positions()
     bot_signals = {}
+
+    # Trades closed by Capital.com since the last run (stop loss / take profit / manual) -> Telegram
+    tracked = state.get("open_deals", {})
+    open_ids = {p["dealId"] for p in positions}
+    gone = [d for i, d in tracked.items() if i not in open_ids]
+    if gone and state.get("last_balance") is not None:
+        bal_change = acc["balance"] - state["last_balance"]
+        for d in gone:
+            px = None
+            try:
+                m = cap.market(d["epic"]); px = m["bid"] if d["direction"] == "BUY" else m["offer"]
+            except RuntimeError:
+                pass
+            reason = "closed"
+            if px and d.get("stop") and d.get("profit"):
+                buy = d["direction"] == "BUY"
+                if (buy and px <= d["stop"]) or (not buy and px >= d["stop"]) or abs(px - d["stop"]) < abs(px - d["profit"]):
+                    reason = "STOP LOSS hit"
+                else:
+                    reason = "TAKE PROFIT hit"
+            res = f"{bal_change:+,.2f} {acc['currency']}" if len(gone) == 1 else "see balance"
+            emoji = "✅" if bal_change > 0 else "🔻" if bal_change < 0 else "⏹"
+            alert.telegram(f"[{label}] {emoji} Trade closed: {d['direction']} {d['size']} {d['epic']} — {reason}\n"
+                           f"Entry {d['level']} | Stop {d.get('stop')} | Target {d.get('profit')}\n"
+                           f"Result ≈ {res}\nBalance now {acc['balance']:,.2f} {acc['currency']}")
+            print(f"  closed since last run: {d['epic']} {d['direction']} ({reason})")
     for sym, epic in t["epics"].items():
         try:
             c = candles(sym, t["timeframe"])
@@ -479,6 +505,7 @@ def main():
             for p in mine:
                 if p["direction"] != signal:
                     cap.close(p["dealId"])
+                    state.get("open_deals", {}).pop(p["dealId"], None)
                     alert.telegram(f"[{label}] Closed {p['direction']} {sym} (size {p['size']}, P/L {p['upl']}) — signal flipped to {signal}")
                     positions = [q for q in positions if q["dealId"] != p["dealId"]]
                     mine = [q for q in mine if q["dealId"] != p["dealId"]]
@@ -543,6 +570,12 @@ def main():
                        + ("" if ok else f"\nReason: {conf.get('reason') or conf.get('status')}"))
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
+    try:
+        state["open_deals"] = {p["dealId"]: {k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit")}
+                               for p in cap.positions()}
+        state["last_balance"] = cap.account()["balance"]
+    except RuntimeError as e:
+        print("  could not refresh open deals:", e)
     json.dump(state, open(state_file, "w"), indent=2)
     if not live_run:   # the public dashboard card shows the demo account
         snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
