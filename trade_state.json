@@ -4,7 +4,7 @@
   "trades_today": 0,
   "entered": {},
   "bot_signal": {
-    "XAU/USD": "WAIT"
+    "XAU/USD": "SELL"
   },
   "open_deals": {},
   "last_balance": 50050.61
