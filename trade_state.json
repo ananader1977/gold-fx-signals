@@ -1,11 +1,22 @@
 {
-  "day": "2026-11-04",
+  "day": "2026-11-05",
   "start_balance": 50050.61,
-  "trades_today": 0,
-  "entered": {},
-  "bot_signal": {
-    "XAU/USD": "WAIT"
+  "trades_today": 1,
+  "entered": {
+    "XAU/USD": "BUY"
   },
-  "open_deals": {},
-  "last_balance": 50050.61
+  "bot_signal": {
+    "XAU/USD": "BUY"
+  },
+  "open_deals": {
+    "00000000-70dc-41d0-0499-3eba0004511e": {
+      "epic": "GOLD",
+      "direction": "BUY",
+      "size": 2.39,
+      "level": 4063.79,
+      "stop": 4006.78,
+      "profit": 4177.78
+    }
+  },
+  "last_balance": 50046.13
 }
