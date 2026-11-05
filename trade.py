@@ -79,9 +79,12 @@ class Capital:
         accs = j.get("accounts", [])
         acc = next((a for a in accs if a.get("preferred")), accs[0] if accs else {})
         bal = acc.get("balance", {})
+        # Capital.com's "balance" already includes open-trade P/L (it is the equity).
+        # "balance" below is the cash balance (closed trades only) = equity - open P/L.
+        eq_v, pnl = float(bal.get("balance", 0)), float(bal.get("profitLoss", 0))
         return {"id": acc.get("accountId"), "name": acc.get("accountName"), "currency": acc.get("currency"),
-                "balance": float(bal.get("balance", 0)), "available": float(bal.get("available", 0)),
-                "pnl": float(bal.get("profitLoss", 0))}
+                "balance": round(eq_v - pnl, 2), "equity": eq_v, "available": float(bal.get("available", 0)),
+                "pnl": pnl}
 
     def market(self, epic):
         j, _ = self.req("GET", f"/markets/{epic}")
@@ -212,17 +215,31 @@ def blocked_time(now, t):
     return None
 
 
+def _fix_history_v2(d):
+    """One-off: history rows written before 2026-11-05 used Capital's equity as 'balance' and
+    added open P/L again for 'equity'. Correct them: equity = old balance, cash = old balance - open P/L."""
+    if d.get("fixed_v2"):
+        return
+    d["history"] = [[t, round(2 * b - e, 2), b] for t, b, e in d.get("history", [])]
+    if d.get("latest"):
+        L = d["latest"]; L["equity"] = L["balance"]; L["balance"] = round(L["balance"] - L.get("open_pl", 0), 2)
+    for p in d.get("phases", []):
+        p["end"]["equity"] = p["end"]["balance"]
+    d["fixed_v2"] = True
+
+
 def snapshot(cap, label, signals=None):
     """Save balance, equity and open positions to equity.json for the dashboard's account card."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     acc, pos = cap.account(), cap.positions()
     upl = sum(float(p["upl"] or 0) for p in pos)
     eq = load_json(EQUITY_FILE, {})
+    _fix_history_v2(eq)
     eq.setdefault("start", {"time": "2026-10-22T10:58:00Z", "balance": 1002.81})
     eq.setdefault("history", [[eq["start"]["time"], eq["start"]["balance"], eq["start"]["balance"]]])
     eq.update({"mode": label, "currency": acc["currency"], "updated": now})
     eq["latest"] = {"balance": round(acc["balance"], 2), "available": round(acc["available"], 2),
-                    "open_pl": round(upl, 2), "equity": round(acc["balance"] + upl, 2),
+                    "open_pl": round(upl, 2), "equity": round(acc["equity"], 2),
                     "positions": [{k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit", "upl", "created")}
                                   for p in pos]}
     if signals is not None:
@@ -275,6 +292,10 @@ def live_snapshot(cap, label):
         except Exception:
             print("::warning::Old live dashboard data could not be decrypted (login changed?) - starting fresh")
             salt = secrets.token_bytes(16); key = _live_key(salt); data = {}
+    if data:
+        _fix_history_v2(data)
+    else:
+        data["fixed_v2"] = True
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     acc, pos = cap.account(), cap.positions()
     upl = sum(float(p["upl"] or 0) for p in pos)
@@ -287,7 +308,7 @@ def live_snapshot(cap, label):
         data["start"], data["history"] = {"time": now, "balance": round(acc["balance"], 2)}, []
     data.update({"mode": label, "currency": acc["currency"], "updated": now,
                  "latest": {"balance": round(acc["balance"], 2), "available": round(acc["available"], 2),
-                            "open_pl": round(upl, 2), "equity": round(acc["balance"] + upl, 2),
+                            "open_pl": round(upl, 2), "equity": round(acc["equity"], 2),
                             "positions": [{k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit", "upl", "created")}
                                           for p in pos]}})
     data["history"].append([now, data["latest"]["balance"], data["latest"]["equity"]])
@@ -427,10 +448,10 @@ def main():
     state = load_json(state_file, {})
     today = now.strftime("%Y-%m-%d")
     if state.get("day") != today:
-        state.update({"day": today, "start_balance": acc["balance"], "trades_today": 0})
+        state.update({"day": today, "start_balance": acc["equity"], "trades_today": 0})
     state.setdefault("entered", {})
 
-    loss_pct = (state["start_balance"] - acc["balance"] - min(acc["pnl"], 0)) / max(state["start_balance"], 1) * 100
+    loss_pct = (state["start_balance"] - acc["equity"]) / max(state["start_balance"], 1) * 100
     halt = None
     if loss_pct >= t["max_daily_loss_pct"]:
         halt = f"daily loss limit hit ({loss_pct:.1f}%)"
@@ -438,7 +459,7 @@ def main():
         halt = "max trades per day reached"
     elif blocked_time(now, t):
         halt = blocked_time(now, t)
-    if t.get("min_balance") and acc["balance"] < t["min_balance"]:
+    if t.get("min_balance") and acc["equity"] < t["min_balance"]:
         halt = f"balance below the {t['min_balance']} {acc['currency']} floor"
         if state.get("floor_alerted") != today:
             state["floor_alerted"] = today
@@ -452,8 +473,8 @@ def main():
     tracked = state.get("open_deals", {})
     open_ids = {p["dealId"] for p in positions}
     gone = [d for i, d in tracked.items() if i not in open_ids]
-    if gone and state.get("last_balance") is not None:
-        bal_change = acc["balance"] - state["last_balance"]
+    if gone:
+        bal_change = acc["balance"] - state["last_cash"] if state.get("last_cash") is not None else None
         for d in gone:
             px = None
             try:
@@ -467,8 +488,9 @@ def main():
                     reason = "STOP LOSS hit"
                 else:
                     reason = "TAKE PROFIT hit"
-            res = f"{bal_change:+,.2f} {acc['currency']}" if len(gone) == 1 else "see balance"
-            emoji = "✅" if bal_change > 0 else "🔻" if bal_change < 0 else "⏹"
+            res = (f"{bal_change:+,.2f} {acc['currency']}" if bal_change is not None and len(gone) == 1
+                   else "see Capital.com history")
+            emoji = "⏹" if bal_change is None else "✅" if bal_change > 0 else "🔻" if bal_change < 0 else "⏹"
             alert.telegram(f"[{label}] {emoji} Trade closed: {d['direction']} {d['size']} {d['epic']} — {reason}\n"
                            f"Entry {d['level']} | Stop {d.get('stop')} | Target {d.get('profit')}\n"
                            f"Result ≈ {res}\nBalance now {acc['balance']:,.2f} {acc['currency']}")
@@ -581,7 +603,9 @@ def main():
     try:
         state["open_deals"] = {p["dealId"]: {k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit")}
                                for p in cap.positions()}
-        state["last_balance"] = cap.account()["balance"]
+        a2 = cap.account()
+        state["last_cash"] = a2["balance"]
+        state.pop("last_balance", None)
     except RuntimeError as e:
         print("  could not refresh open deals:", e)
     json.dump(state, open(state_file, "w"), indent=2)
