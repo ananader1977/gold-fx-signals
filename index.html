@@ -72,7 +72,7 @@ body.locked{overflow:hidden}
     </div>
   </div>
 
-  <div class="card warn" id="setup">
+  <div class="card warn" id="setup" style="display:none"><!-- hidden at Anas's request (2026-11-05): only fed the hidden gold card -->
     <b>Setup</b> <span class="mut">— stored only in this browser</span>
     <div class="row" style="margin-top:8px">
       <label>Twelve Data API key <input id="apiKey" type="password" style="width:220px" placeholder="free key"></label>
@@ -341,7 +341,7 @@ try{$("lvRemember").checked=localStorage.getItem("lvRem")==="1";const u=localSto
 try{const s=JSON.parse(localStorage.getItem("lvk")||sessionStorage.getItem("lvk")||"null");if(s){liveKey=b64d(s.k).buffer;liveSalt=s.s;refreshLive()}}catch(_){}
 setInterval(refreshLive,5*60e3);
 
-renderAlerts();if(S.key)start();else $("status").textContent="Enter your API key to start";
+renderAlerts();   // gold card + Setup are hidden, so no price polling (saves the Twelve Data key's credits)
 </script>
 </body>
 </html>
