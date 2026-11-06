@@ -2,11 +2,9 @@
   "day": "2026-11-06",
   "start_balance": 50298.84,
   "trades_today": 0,
-  "entered": {
-    "XAU/USD": "BUY"
-  },
+  "entered": {},
   "bot_signal": {
-    "XAU/USD": "BUY"
+    "XAU/USD": "WAIT"
   },
   "open_deals": {
     "00000000-70dc-41d0-0499-3eba0004511e": {
