@@ -1,6 +1,6 @@
 {
-  "day": "2026-11-06",
-  "start_balance": 50298.84,
+  "day": "2026-11-08",
+  "start_balance": 50088.34,
   "trades_today": 0,
   "entered": {},
   "bot_signal": {
@@ -16,5 +16,5 @@
       "profit": 4177.78
     }
   },
-  "last_cash": 50044.98
+  "last_cash": 50034.02
 }
