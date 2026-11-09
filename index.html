@@ -33,7 +33,9 @@ ul{list-style:none;padding:0;margin:8px 0 0}
 #gate input,#gate button{width:100%;font-size:16px;padding:12px}
 body.locked{overflow:hidden}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-top:10px}
-.kv{font-size:20px;font-weight:700}.up{color:var(--buy)}.down{color:var(--sell)}
+.kv{font-size:20px;font-weight:700}
+.status{margin-top:10px;padding:9px 12px;border-radius:8px;background:#20242d;font-size:14px}
+.status.open{background:color-mix(in srgb,var(--buy) 16%,transparent)}.status.alert{background:color-mix(in srgb,var(--sell) 18%,transparent)}.up{color:var(--buy)}.down{color:var(--sell)}
 </style>
 </head>
 <body>
@@ -60,6 +62,7 @@ body.locked{overflow:hidden}
     <div class="row" style="justify-content:space-between"><b>Live account 🔒</b><span class="badge SELL">LIVE</span></div>
     <small id="lvMsg" class="mut"></small>
     <div id="lvBody" style="display:none">
+      <div id="lvStatus"></div>
       <div class="kpis">
         <div><small>Balance</small><div class="kv" id="lvBal">—</div></div>
         <div><small>Equity (incl. open trades)</small><div class="kv" id="lvEq">—</div></div>
@@ -86,6 +89,7 @@ body.locked{overflow:hidden}
 
   <div class="card" id="acct">
     <div class="row" style="justify-content:space-between"><b>Demo account</b><span class="badge WAIT" id="acMode">—</span></div>
+    <div id="acStatus"></div>
     <div class="kpis">
       <div><small>Balance</small><div class="kv" id="acBal">—</div></div>
       <div><small>Equity (incl. open trades)</small><div class="kv" id="acEq">—</div></div>
@@ -276,12 +280,19 @@ function renderBot(){
 // ---------- Capital.com account (from equity.json written by the bot) ----------
 let acChart=null,acEqS=null,acBalS=null;
 function money(v,c){return v==null?"—":Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+" "+(c||"")}
+// One-line trade status. A trade without a stop loss was not placed by the bot (the bot always sends one).
+function tradeStatus(pos,item,c){
+  if(pos&&pos.length)return pos.map(p=>{const manual=p.stop==null||p.profit==null;
+    return `<div class="status ${manual?"alert":"open"}">${manual?"⚠️":"🟢"} <b>Trade open:</b> ${p.direction} ${p.size} ${p.epic} @ ${p.level} · P/L <b class="${p.upl>=0?"up":"down"}">${p.upl>=0?"+":""}${Number(p.upl).toFixed(2)} ${c||""}</b>`+
+      (manual?` · <b>no stop loss — not opened by the bot</b>`:` · stop ${p.stop} / target ${p.profit}`)+`</div>`}).join("");
+  return `<div class="status">⚪ <b>No open trade.</b> ${item?`Bot: ${item.signal} — ${item.action}`:"Bot is waiting for a BUY signal."}</div>`}
 async function loadAccount(){
   try{
     const r=await fetch("equity.json?ts="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error("not created yet");
     const d=await r.json(),L=d.latest||{},c=d.currency||"";
     S.bot=d.signals||null;renderBot();if(S.candles&&Object.keys(S.candles).length)render();
     $("acMode").textContent=d.mode||"—";$("acMode").className="badge "+(d.mode==="LIVE"?"SELL":"BUY");
+    $("acStatus").innerHTML=tradeStatus(L.positions,d.signals?.items?.["XAU/USD"],c);
     $("acBal").textContent=money(L.balance,c);$("acEq").textContent=money(L.equity,c);$("acAvail").textContent=money(L.available,c);
     const s=d.start?.balance,chg=L.equity!=null&&s?L.equity-s:null;
     $("acChg").innerHTML=chg==null?"—":`<span class="${chg>=0?"up":"down"}">${chg>=0?"+":""}${money(chg,c)} (${(chg/s*100).toFixed(2)}%)</span>`;
@@ -325,6 +336,7 @@ function liveLogout(msg){liveKey=null;liveSalt=null;try{sessionStorage.removeIte
 function renderLive(d){
   $("gate").style.display="none";document.body.classList.remove("locked");$("lvBody").style.display="";$("lvMsg").textContent="";
   const L=d.latest||{},c=d.currency||"",s=d.start?.balance,chg=L.equity!=null&&s?L.equity-s:null;
+  $("lvStatus").innerHTML=tradeStatus(L.positions,d.bot?.items?.["XAU/USD"],c);
   $("lvBal").textContent=money(L.balance,c);$("lvEq").textContent=money(L.equity,c);$("lvAvail").textContent=money(L.available,c);
   $("lvChg").innerHTML=chg==null?"—":`<span class="${chg>=0?"up":"down"}">${chg>=0?"+":""}${money(chg,c)} (${(chg/s*100).toFixed(2)}%)</span>`;
   const pos=L.positions||[];

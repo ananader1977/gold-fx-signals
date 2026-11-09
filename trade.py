@@ -275,7 +275,7 @@ def _live_key(salt):
     return hashlib.pbkdf2_hmac("sha256", f"{user}\n{pwd}".encode(), salt, PBKDF2_ITER, 32)
 
 
-def live_snapshot(cap, label):
+def live_snapshot(cap, label, bot=None):
     """Encrypted live-account snapshot for the dashboard's login-protected card (repo is public:
     only ciphertext is committed; it can be read only with the dashboard username + password)."""
     import base64, secrets
@@ -313,6 +313,8 @@ def live_snapshot(cap, label):
                                           for p in pos]}})
     data["history"].append([now, data["latest"]["balance"], data["latest"]["equity"]])
     data["history"] = data["history"][-5000:]
+    if bot is not None:
+        data["bot"] = bot   # live bot's signal + last decision, for the dashboard status line
     iv = secrets.token_bytes(12)
     ct = AESGCM(key).encrypt(iv, json.dumps(data, separators=(",", ":")).encode(), None)
     json.dump({"v": 1, "kdf": "PBKDF2-SHA256", "iter": PBKDF2_ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)},
@@ -640,7 +642,7 @@ def main():
     if not live_run:   # the public dashboard card shows the demo account
         snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
     else:              # live account: encrypted, shown only after login
-        live_snapshot(cap, label)
+        live_snapshot(cap, label, {"updated": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "items": bot_signals})
 
 
 if __name__ == "__main__":
