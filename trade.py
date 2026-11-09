@@ -413,6 +413,26 @@ def main():
             alert.telegram(f"[{label}] Capital.com account(s):\n" + "\n".join(lines))
         except RuntimeError as e:
             print("  could not list accounts:", e)
+        # money movements (fees, swaps, trades) -> Telegram; % only in the public log for live
+        try:
+            from datetime import timedelta
+            j, _ = cap.req("GET", "/history/transactions", params={
+                "from": (now - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%S"), "to": now.strftime("%Y-%m-%dT%H:%M:%S")})
+            tx = j.get("transactions", [])
+            sums = {}
+            for x in tx:
+                k = x.get("transactionType", "?"); sums[k] = sums.get(k, 0.0) + float(x.get("size") or 0)
+            lines = [f"• {x.get('dateUtc', x.get('date', ''))[:16]} {x.get('transactionType')} {float(x.get('size') or 0):+.2f} "
+                     f"{x.get('currency', '')} {x.get('note') or x.get('instrumentName') or ''}" for x in tx[:25]]
+            alert.telegram(f"[{label}] Money movements, last 14 days:\n" + ("\n".join(lines) or "none") +
+                           "\nTotals: " + ", ".join(f"{k} {v:+.2f}" for k, v in sums.items()) +
+                           f"\nOpen P/L {acc['pnl']:+.2f} | cash {acc['balance']:.2f} | equity {acc['equity']:.2f} {acc['currency']}")
+            base = max(acc["equity"], 0.01)
+            shown = {k: (f"{100 * v / base:+.2f}%" if live_run else f"{v:+.2f}") for k, v in sums.items()}
+            print(f"::notice::[{label}] last 14 days by type: {shown}; open P/L "
+                  f"{(f'{100 * acc['pnl'] / base:+.2f}%' if live_run else f'{acc['pnl']:+.2f}')}; {len(tx)} transactions")
+        except RuntimeError as e:
+            print("  could not read transactions:", str(e)[:150])
         missing = []
         for sym, epic in t["epics"].items():
             try:
