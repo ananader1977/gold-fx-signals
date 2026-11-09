@@ -459,7 +459,13 @@ def main():
         if not live_run:
             print("  open positions:", cap.positions() or "none")
         else:
-            print(f"::notice::[{label}] open positions: {len(cap.positions())}")
+            ps = cap.positions()
+            print(f"::notice::[{label}] open positions: {len(ps)}")
+            base = max(acc["equity"], 0.01)
+            for p in ps:   # levels and sizes only; P/L as % of equity (public log)
+                print(f"::notice::[{label}] position {p['epic']} {p['direction']} size {p['size']} entry {p['level']} "
+                      f"stop {p['stop']} target {p['profit']} opened {p['created']} P/L {100 * float(p['upl'] or 0) / base:+.2f}% "
+                      f"{'(bot)' if p['dealId'] in load_json(state_file, {}).get('open_deals', {}) else '(NOT opened by the bot)'}")
             live_snapshot(cap, label)
         if missing:
             sys.exit(f"Market name not found for: {', '.join(missing)} (see candidates above)")
