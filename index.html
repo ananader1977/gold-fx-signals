@@ -87,6 +87,8 @@ body.locked{overflow:hidden}
     <p class="mut" style="margin:8px 0 0">Free key: 8 calls/min, 800/day. Each poll uses 1 call, so 60 s is fine. Polling slows to 1/3 speed when the tab is in the background and pauses at weekends.</p>
   </div>
 
+  <div id="sig-XAUUSD"></div><!-- gold's 3 trend checks (filled by renderBot from equity.json) -->
+
   <div class="card" id="acct">
     <div class="row" style="justify-content:space-between"><b>Demo account</b><span class="badge WAIT" id="acMode">—</span></div>
     <div id="acStatus"></div>
@@ -258,7 +260,7 @@ $("apiKey").value=S.key||"";$("poll").value=S.poll;$("balance").value=S.balance;
 // ---------- Bot's own signal (from equity.json → signals, written by trade.py each run) ----------
 function renderBot(){
   for(const sym of Object.keys(SYMBOLS)){
-    const el=document.querySelector(`#c-${sym.replace("/","")} [data-k=bot]`);if(!el)continue;
+    const el=document.getElementById(`sig-${sym.replace("/","")}`);if(!el)continue;
     const b=S.bot?.items?.[sym];
     if(!b){el.innerHTML=S.bot?`<div class="mut" style="margin:8px 0">Watch only — the bot doesn't trade ${sym}${sym==="BTC/USD"?" (failed the backtest, Oct 2026)":""}.</div>`:"";continue}
     const ok=(c,t)=>`<li>${c?"<span class='up'>✓</span>":"<span class='down'>✗</span>"} ${t}</li>`;
@@ -270,7 +272,7 @@ function renderBot(){
     const stop=b.close-b.stop_atr*b.atr,tgt=b.close+b.target_atr*b.atr;
     el.innerHTML=`<div style="border:1px solid var(--acc);border-radius:10px;padding:10px;margin:8px 0">
       <div class="row" style="justify-content:space-between"><b>Bot signal · ${b.timeframe} ${b.rule}${b.long_only?", buy-only":""}</b><span class="badge ${cls}">${label}</span></div>
-      <div style="margin:6px 0"><b>Now:</b> ${b.action||"—"}</div>
+      <div style="margin:6px 0"><b>Demo bot now:</b> ${b.action||"—"}</div>
       <ul class="mut" style="margin:4px 0">${ok(up,`EMA20 ${fmt(sym,b.ema20)} ${up?">":"<"} EMA50 ${fmt(sym,b.ema50)}`)}${ok(above,`Close ${fmt(sym,b.close)} ${above?">":"<"} EMA50`)}${ok(mh,`MACD histogram ${mh?"above":"below"} 0`)}</ul>
       <div class="mut">Buys only when all three are ✓ · stop ${b.stop_atr}×ATR, target ${b.target_atr}×ATR · risk ${b.risk_pct}%</div>
       <div class="mut">If it bought now: stop ≈ ${fmt(sym,stop)}, target ≈ ${fmt(sym,tgt)} (4h ATR ${fmt(sym,b.atr)})</div>
