@@ -625,6 +625,9 @@ def main():
                        + ("" if ok else f"\nReason: {conf.get('reason') or conf.get('status')}"))
         print("  order:", conf.get("dealStatus"), conf.get("dealId"))
 
+    if live_run:   # decisions carry no money amounts, so they can go in the public log
+        for s, i in bot_signals.items():
+            print(f"::notice::[{label}] {s} {i.get('signal')}: {i.get('action')}")
     try:
         state["open_deals"] = {p["dealId"]: {k: p[k] for k in ("epic", "direction", "size", "level", "stop", "profit")}
                                for p in cap.positions()}
