@@ -6,6 +6,10 @@
       "headers": {
         "Authorization": "Bearer ${PERPLEXITY_API_KEY}"
       }
+    },
+    "perplexity-docs": {
+      "type": "http",
+      "url": "https://docs.perplexity.ai/mcp"
     }
   }
 }
