@@ -136,6 +136,13 @@ class Capital:
         j, _ = self.req("DELETE", f"/positions/{deal_id}")
         return j
 
+    def set_stop(self, deal_id, stop, profit=None):
+        body = {"stopLevel": stop}
+        if profit is not None:
+            body["profitLevel"] = profit   # resend the existing target so the update keeps it
+        j, _ = self.req("PUT", f"/positions/{deal_id}", body)
+        return j
+
 
 # ---------------- helpers ----------------
 def load_json(path, default):
@@ -531,6 +538,26 @@ def main():
         _, signal, score, r = fn([x["close"] for x in c])
         a = atr(c)
         mine = [p for p in positions if p["epic"] == epic]
+        # Safety guard: any position without a stop loss (manual order, or merged into the bot's trade)
+        # gets one at 2 x ATR from entry; if price is already past that, 1 x ATR from the current price.
+        for p in [p for p in mine if p["stop"] is None]:
+            buy = p["direction"] == "BUY"
+            px = float((p["bid"] if buy else p["offer"]) or p["level"])
+            far = t["stop_atr"] * a
+            stop = min(p["level"] - far, px - a) if buy else max(p["level"] + far, px + a)
+            stop = round(stop, alert.DP.get(sym, 4))
+            try:
+                cap.set_stop(p["dealId"], stop, p["profit"])
+                p["stop"] = stop
+                alert.telegram(f"[{label}] 🛡 Safety guard: {p['direction']} {p['size']} {epic} had NO stop loss.\n"
+                               f"Stop set at {stop} (entry {p['level']}, price {px}).\n"
+                               f"Max further loss ≈ {abs(px - stop) * float(p['size']):.2f} USD.\n"
+                               "Avoid manual orders on this account: they merge with the bot's trade.")
+                print(f"::warning::[{label}] safety guard: stop set at {stop} on {p['direction']} {p['size']} {epic}")
+            except RuntimeError as e:
+                alert.telegram(f"[{label}] ⚠️ {p['direction']} {p['size']} {epic} has NO stop loss and the bot could not set one "
+                               f"({str(e)[:120]}). Please add a stop loss in the Capital.com app now.")
+                print(f"::error::[{label}] safety guard failed: {str(e)[:200]}")
         closes = [x["close"] for x in c]
         e20, e50 = alert.ema(closes, 20)[-1], alert.ema(closes, 50)[-1]
         mh = alert.macd_hist(closes)[-1]
