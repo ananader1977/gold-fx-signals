@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "perplexity-web-research": {
+      "source": "xpepper/perplexity-agent-skill",
+      "sourceType": "github",
+      "skillPath": "perplexity-web-research/SKILL.md",
+      "computedHash": "1771ff2d5edf768975956a4652fb73ae42b01f6c6ddb6cbbf4f7276f50b1d7b9"
+    }
+  }
+}
