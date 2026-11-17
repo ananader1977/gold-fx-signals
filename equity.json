@@ -1678,11 +1678,16 @@
    "2026-11-17T11:40:41Z",
    49996.69,
    49996.69
+  ],
+  [
+   "2026-11-17T20:02:28Z",
+   49996.69,
+   49996.69
   ]
  ],
  "mode": "DEMO",
  "currency": "AED",
- "updated": "2026-11-17T11:40:41Z",
+ "updated": "2026-11-17T20:02:28Z",
  "latest": {
   "balance": 49996.69,
   "available": 49996.69,
@@ -1691,7 +1696,7 @@
   "positions": []
  },
  "signals": {
-  "updated": "2026-11-17T11:40:38Z",
+  "updated": "2026-11-17T20:02:26Z",
   "items": {
    "XAU/USD": {
     "signal": "WAIT",
@@ -1699,12 +1704,12 @@
     "timeframe": "4h",
     "rule": "trend",
     "long_only": true,
-    "candle": "2026-11-17T04:00Z",
-    "close": 3871.59,
-    "ema20": 3881.02,
-    "ema50": 3925.86,
-    "macd_hist": 4.8949,
-    "atr": 21.15,
+    "candle": "2026-11-17T16:00Z",
+    "close": 3846.8,
+    "ema20": 3876.27,
+    "ema50": 3918.78,
+    "macd_hist": 3.5018,
+    "atr": 24.04,
     "stop_atr": 2.0,
     "target_atr": 4.0,
     "risk_pct": 1.0,
