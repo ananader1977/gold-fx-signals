@@ -440,6 +440,11 @@ def main():
             shown = {k: (f"{100 * v / base:+.2f}%" if live_run else f"{v:+.2f}") for k, v in sums.items()}
             print(f"::notice::[{label}] last 14 days by type: {shown}; open P/L "
                   f"{(f'{100 * acc['pnl'] / base:+.2f}%' if live_run else f'{acc['pnl']:+.2f}')}; {len(tx)} transactions")
+            # one line per transaction for reviewing trades; live amounts as % of equity (public log)
+            for x in tx[:40]:
+                v = float(x.get("size") or 0)
+                print(f"::notice::[{label}] tx {x.get('dateUtc', x.get('date', ''))[:16]} {x.get('transactionType')} "
+                      f"{(f'{100 * v / base:+.2f}%' if live_run else f'{v:+.2f}')} {x.get('note') or x.get('instrumentName') or ''}")
         except RuntimeError as e:
             print("  could not read transactions:", str(e)[:150])
         missing = []
