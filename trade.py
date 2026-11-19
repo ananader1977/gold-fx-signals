@@ -426,7 +426,7 @@ def main():
         try:
             from datetime import timedelta
             j, _ = cap.req("GET", "/history/transactions", params={
-                "from": (now - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%S"), "to": now.strftime("%Y-%m-%dT%H:%M:%S")})
+                "from": (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%S"), "to": now.strftime("%Y-%m-%dT%H:%M:%S")})
             tx = j.get("transactions", [])
             sums = {}
             for x in tx:
@@ -441,10 +441,10 @@ def main():
             print(f"::notice::[{label}] last 14 days by type: {shown}; open P/L "
                   f"{(f'{100 * acc['pnl'] / base:+.2f}%' if live_run else f'{acc['pnl']:+.2f}')}; {len(tx)} transactions")
             # one line per transaction for reviewing trades; live amounts as % of equity (public log)
-            for x in tx[:40]:
-                v = float(x.get("size") or 0)
-                print(f"::notice::[{label}] tx {x.get('dateUtc', x.get('date', ''))[:16]} {x.get('transactionType')} "
-                      f"{(f'{100 * v / base:+.2f}%' if live_run else f'{v:+.2f}')} {x.get('note') or x.get('instrumentName') or ''}")
+            rows = [f"{x.get('dateUtc', x.get('date', ''))[:16]} {x.get('transactionType')} "
+                    f"{(f'{100 * float(x.get('size') or 0) / base:+.2f}%' if live_run else f'{float(x.get('size') or 0):+.2f}')} "
+                    f"{x.get('note') or x.get('instrumentName') or ''}" for x in tx[:60]]
+            print(f"::notice title=[{label}] transactions::" + "%0A".join(rows))   # one annotation (GitHub caps their number)
         except RuntimeError as e:
             print("  could not read transactions:", str(e)[:150])
         missing = []
